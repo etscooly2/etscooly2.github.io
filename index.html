@@ -59,7 +59,7 @@
         <div class="game-card"><a href="UNO.htm">🃏 UNO</a></div>
         <div class="game-card"><a href="chess.htm">♔ Chess</a></div>
         <div class="game-card">
-            <button class="speak-btn" onclick="speakTime()">⏰ Clock (Speak Time)</button>
+            <button class="speak-btn" onclick="speakTime()">⏰ Clock</button>
         </div>
         <div class="game-card"><a href="football.htm">🏈 Football</a></div>
         <div class="game-card"><a href="minesweeper.html">💣 Minesweeper</a></div>
@@ -72,20 +72,17 @@
     <script>
         function speakTime() {
             const now = new Date();
-            // Format hours and minutes to 24-hour / military time format without seconds
             let hours = now.getHours().toString().padStart(2, '0');
             let minutes = now.getMinutes().toString().padStart(2, '0');
             
-            const timeString = hours + " " + minutes;
+            const timeString = hours + ":" + minutes;
             const speechText = `The current time is ${hours} hundred ${minutes} hours.`;
             
-            // Alert visual fallback
             alert("Current Military Time: " + timeString);
             
-            // Trigger Text-to-Speech
             if ('speechSynthesis' in window) {
                 const utterance = new SpeechSynthesisUtterance(speechText);
-                utterance.rate = 0.9; // Slightly slower pacing for clarity
+                utterance.rate = 0.9; 
                 window.speechSynthesis.speak(utterance);
             } else {
                 alert("Text-to-speech is not supported in this browser.");
