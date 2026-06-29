@@ -1,1 +1,64 @@
-<h1>Hello World from my free site!</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My HTML Arcade</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+        }
+        h1 {
+            color: #00ffcc;
+        }
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 800px;
+            margin: 40px auto;
+        }
+        .game-card {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #333;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .game-card:hover {
+            transform: scale(1.05);
+            border-color: #00ffcc;
+        }
+        a {
+            color: #ffffff;
+            text-decoration: none;
+            font-size: 1.2rem;
+            font-weight: bold;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎮 Welcome to My Arcade 🎮</h1>
+    <p>Click on any game below to start playing instantly!</p>
+
+    <div class="game-grid">
+        <div class="game-card"><a href="UNO.htm">🃏 UNO</a></div>
+        <div class="game-card"><a href="chess.htm">♔ Chess</a></div>
+        <div class="game-card"><a href="clock.htm">⏰ Clock</a></div>
+        <div class="game-card"><a href="football.htm">🏈 Football</a></div>
+        <div class="game-card"><a href="minesweeper.html">💣 Minesweeper</a></div>
+        <div class="game-card"><a href="penalty shootout.htm">⚽ Penalty Shootout</a></div>
+        <div class="game-card"><a href="pendulum.htm">⏳ Pendulum</a></div>
+        <div class="game-card"><a href="snake.htm">🐍 Snake</a></div>
+        <div class="game-card"><a href="sniper.htm">🎯 Sniper</a></div>
+        <div class="game-card"><a href="testingbaseball.html">⚾ Baseball Test</a></div>
+    </div>
+
+</body>
+</html>
