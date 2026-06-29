@@ -28,17 +28,25 @@
             border-radius: 8px;
             border: 2px solid #333;
             transition: transform 0.2s, border-color 0.2s;
+            cursor: pointer;
         }
         .game-card:hover {
             transform: scale(1.05);
             border-color: #00ffcc;
         }
-        a {
+        a, .speak-btn {
             color: #ffffff;
             text-decoration: none;
             font-size: 1.2rem;
             font-weight: bold;
             display: block;
+            background: none;
+            border: none;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            font-family: inherit;
+            padding: 0;
         }
     </style>
 </head>
@@ -50,15 +58,40 @@
     <div class="game-grid">
         <div class="game-card"><a href="UNO.htm">🃏 UNO</a></div>
         <div class="game-card"><a href="chess.htm">♔ Chess</a></div>
-        <div class="game-card"><a href="clock.htm">⏰ Clock</a></div>
+        <div class="game-card">
+            <button class="speak-btn" onclick="speakTime()">⏰ Clock (Speak Time)</button>
+        </div>
         <div class="game-card"><a href="football.htm">🏈 Football</a></div>
         <div class="game-card"><a href="minesweeper.html">💣 Minesweeper</a></div>
         <div class="game-card"><a href="penalty shootout.htm">⚽ Penalty Shootout</a></div>
         <div class="game-card"><a href="pendulum.htm">⏳ Pendulum</a></div>
         <div class="game-card"><a href="snake.htm">🐍 Snake</a></div>
-        <div class="game-card"><a href="sniper.htm">🎯 Sniper</a></div>
         <div class="game-card"><a href="testingbaseball.html">⚾ Baseball Test</a></div>
     </div>
+
+    <script>
+        function speakTime() {
+            const now = new Date();
+            // Format hours and minutes to 24-hour / military time format without seconds
+            let hours = now.getHours().toString().padStart(2, '0');
+            let minutes = now.getMinutes().toString().padStart(2, '0');
+            
+            const timeString = hours + " " + minutes;
+            const speechText = `The current time is ${hours} hundred ${minutes} hours.`;
+            
+            // Alert visual fallback
+            alert("Current Military Time: " + timeString);
+            
+            // Trigger Text-to-Speech
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(speechText);
+                utterance.rate = 0.9; // Slightly slower pacing for clarity
+                window.speechSynthesis.speak(utterance);
+            } else {
+                alert("Text-to-speech is not supported in this browser.");
+            }
+        }
+    </script>
 
 </body>
 </html>
