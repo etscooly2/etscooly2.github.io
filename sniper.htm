@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Time Sniper - Playable Full Version</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: black; font-family: Arial; }
+        canvas { display: block; }
+
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            z-index: 10;
+            user-select: none;
+        }
+
+        #center {
+            position: absolute;
+            top: 50%;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        #bar {
+            width: 180px;
+            height: 10px;
+            background: #333;
+            margin-top: 5px;
+        }
+
+        #fill {
+            height: 100%;
+            width: 100%;
+            background: lime;
+        }
+    </style>
+</head>
+<body>
+
+<div id="hud">
+Score: <span id="score">0</span><br>
+Ammo: <span id="ammo">6</span>/<span id="max">6</span><br>
+Enemies: <span id="enemies">0</span><br>
+Hold SHIFT = Slow Time | Right Click = Scope | R = Reload
+<br>
+Focus:
+<div id="bar"><div id="fill"></div></div>
+</div>
+
+<div id="center">CLICK TO PLAY</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/PointerLockControls.js"></script>
+
+<script>
+let scene, camera, renderer, controls;
+
+let enemies = [];
+let bullets = [];
+
+let score = 0;
+let ammo = 6;
+let maxAmmo = 6;
+
+let slow = false;
+let scoped = false;
+let focus = 100;
+
+let killcam = 0;
+
+const hudScore = document.getElementById("score");
+const hudAmmo = document.getElementById("ammo");
+const hudMax = document.getElementById("max");
+const hudEnemies = document.getElementById("enemies");
+const fill = document.getElementById("fill");
+const center = document.getElementById("center");
+
+init();
+loop();
+
+function init() {
+
+    scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x000000, 10, 140);
+
+    camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+    camera.position.y = 2;
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    controls = new THREE.PointerLockControls(camera, document.body);
+    scene.add(controls.getObject());
+
+    // FIXED CLICK START (no freeze)
+    center.addEventListener("click", () => {
+        controls.lock();
+    });
+
+    controls.addEventListener("lock", () => {
+        center.style.display = "none";
+    });
+
+    controls.addEventListener("unlock", () => {
+        center.style.display = "block";
+    });
+
+    // ground
+    const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(400, 400),
+        new THREE.MeshBasicMaterial({ color: 0x222222 })
+    );
+    ground.rotation.x = -Math.PI/2;
+    scene.add(ground);
+
+    // cover
+    for (let i = 0; i < 20; i++) {
+        const box = new THREE.Mesh(
+            new THREE.BoxGeometry(3,3,3),
+            new THREE.MeshBasicMaterial({ color: 0x333333 })
+        );
+        box.position.set((Math.random()-0.5)*140, 1.5, (Math.random()-0.5)*140);
+        scene.add(box);
+    }
+
+    spawnWave();
+
+    document.addEventListener("keydown", e => {
+        if (e.key === "Shift") slow = true;
+        if (e.key.toLowerCase() === "r") reload();
+    });
+
+    document.addEventListener("keyup", e => {
+        if (e.key === "Shift") slow = false;
+    });
+
+    document.addEventListener("mousedown", e => {
+        if (e.button === 2) scoped = true;
+        if (e.button === 0) shoot();
+    });
+
+    document.addEventListener("mouseup", e => {
+        if (e.button === 2) scoped = false;
+    });
+
+    document.addEventListener("contextmenu", e => e.preventDefault());
+
+    window.addEventListener("resize", () => {
+        camera.aspect = innerWidth/innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+    });
+}
+
+function spawnWave() {
+    enemies = [];
+    for (let i = 0; i < 12; i++) {
+        const e = new THREE.Mesh(
+            new THREE.BoxGeometry(1,2,1),
+            new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
+
+        e.position.set(
+            (Math.random()-0.5)*120,
+            1,
+            (Math.random()-0.5)*120
+        );
+
+        e.userData = {
+            vx: (Math.random()-0.5)*0.2,
+            vz: (Math.random()-0.5)*0.2,
+            hp: 2
+        };
+
+        scene.add(e);
+        enemies.push(e);
+    }
+}
+
+function reload() {
+    if (ammo === maxAmmo) return;
+    setTimeout(() => ammo = maxAmmo, 800);
+}
+
+function shoot() {
+    if (ammo <= 0) return;
+    ammo--;
+
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0,0), camera);
+
+    const hits = ray.intersectObjects(enemies);
+
+    if (hits.length > 0) {
+        const e = hits[0].object;
+        e.userData.hp--;
+
+        if (e.userData.hp <= 0) {
+            scene.remove(e);
+            enemies = enemies.filter(x => x !== e);
+
+            score += 100;
+            hudScore.innerText = score;
+        }
+
+        killcam = 30;
+    }
+
+    const b = new THREE.Mesh(
+        new THREE.SphereGeometry(0.07),
+        new THREE.MeshBasicMaterial({ color: 0xffff00 })
+    );
+
+    b.position.copy(camera.position);
+
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+
+    b.userData.vel = dir.multiplyScalar(2);
+    b.userData.vel.y -= 0.01;
+
+    scene.add(b);
+    bullets.push(b);
+
+    hudAmmo.innerText = ammo;
+}
+
+function updateEnemies() {
+    const s = slow ? 0.2 : 1;
+
+    enemies.forEach(e => {
+        const dist = e.position.distanceTo(camera.position);
+
+        if (dist < 20) {
+            const dir = new THREE.Vector3().subVectors(camera.position, e.position).normalize();
+            e.position.addScaledVector(dir, -0.1);
+        } else {
+            e.position.x += e.userData.vx * s;
+            e.position.z += e.userData.vz * s;
+        }
+
+        if (Math.abs(e.position.x) > 150) e.userData.vx *= -1;
+        if (Math.abs(e.position.z) > 150) e.userData.vz *= -1;
+    });
+
+    hudEnemies.innerText = enemies.length;
+
+    if (enemies.length === 0) spawnWave();
+}
+
+function updateBullets() {
+    const s = slow ? 0.3 : 1;
+
+    bullets.forEach((b,i) => {
+        b.userData.vel.y -= 0.01;
+        b.position.addScaledVector(b.userData.vel, s);
+
+        if (b.position.length() > 300) {
+            scene.remove(b);
+            bullets.splice(i,1);
+        }
+    });
+}
+
+function updateHUD() {
+    focus += slow ? -0.7 : 0.4;
+    focus = Math.max(0, Math.min(100, focus));
+
+    fill.style.width = focus + "%";
+}
+
+function loop() {
+    requestAnimationFrame(loop);
+
+    updateEnemies();
+    updateBullets();
+    updateHUD();
+
+    if (killcam > 0) {
+        killcam--;
+        scene.fog = new THREE.Fog(0x001133, 10, 80);
+    } else {
+        scene.fog = new THREE.Fog(0x000000, 10, 140);
+    }
+
+    camera.fov = scoped ? 20 : 75;
+    camera.updateProjectionMatrix();
+
+    renderer.render(scene, camera);
+}
+</script>
+
+</body>
+</html>

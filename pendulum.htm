@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Cradle - etscooly</title>
+    <style>
+        body {
+            margin: 0;
+            background: radial-gradient(circle at center, #111, #000);
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        .hint { font-size: 0.7rem; color: #004400; letter-spacing: 1px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div>SYSTEM: INTERACTIVE_CRADLE_V3</div>
+        <div id="clock">13:39</div>
+        <div class="hint">CLICK AND DRAG ANY BALL TO RELEASE</div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const clockEl = document.getElementById('clock');
+
+    let width, height;
+    const numBalls = 5;
+    const ballRadius = 25;
+    const pLength = 300;
+    const gravity = 0.5;
+    let draggedBall = null;
+
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Clock display (Military Time)
+    function updateClock() {
+        const d = new Date();
+        clockEl.innerText = d.getHours().toString().padStart(2, '0') + ":" + 
+                           d.getMinutes().toString().padStart(2, '0');
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    class Pendulum {
+        constructor(x, id) {
+            this.id = id;
+            this.originX = x;
+            this.originY = 150;
+            this.angle = 0;
+            this.v = 0;
+            this.a = 0;
+        }
+
+        update() {
+            if (draggedBall === this) return;
+            
+            let force = -gravity * Math.sin(this.angle);
+            this.a = force / pLength;
+            this.v += this.a;
+            this.v *= 0.999; 
+            this.angle += this.v;
+        }
+
+        getPos() {
+            return {
+                x: this.originX + Math.sin(this.angle) * pLength,
+                y: this.originY + Math.cos(this.angle) * pLength
+            };
+        }
+
+        draw() {
+            const pos = this.getPos();
+
+            ctx.beginPath();
+            ctx.moveTo(this.originX - 10, this.originY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.moveTo(this.originX + 10, this.originY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            const grad = ctx.createRadialGradient(pos.x - 8, pos.y - 8, 2, pos.x, pos.y, 25);
+            grad.addColorStop(0, '#fff');
+            grad.addColorStop(0.2, '#00ff00');
+            grad.addColorStop(1, '#004400');
+
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+        }
+    }
+
+    const pendulums = [];
+    const startX = (window.innerWidth / 2) - (ballRadius * (numBalls - 1));
+    for (let i = 0; i < numBalls; i++) {
+        pendulums.push(new Pendulum(startX + (i * ballRadius * 2), i));
+    }
+
+    // Interaction Logic
+    canvas.addEventListener('mousedown', (e) => {
+        pendulums.forEach(p => {
+            const pos = p.getPos();
+            const dist = Math.hypot(e.clientX - pos.x, e.clientY - pos.y);
+            if (dist < ballRadius) {
+                draggedBall = p;
+                p.v = 0;
+            }
+        });
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (draggedBall) {
+            const dx = e.clientX - draggedBall.originX;
+            const dy = e.clientY - draggedBall.originY;
+            draggedBall.angle = Math.atan2(dx, dy);
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        draggedBall = null;
+    });
+
+    function solveCollisions() {
+        for (let i = 0; i < pendulums.length - 1; i++) {
+            let p1 = pendulums[i];
+            let p2 = pendulums[i+1];
+
+            if (p1.angle > p2.angle) {
+                let v1 = p1.v;
+                let v2 = p2.v;
+                p1.v = v2;
+                p2.v = v1;
+                p1.angle = p2.angle;
+            }
+        }
+    }
+
+    function animate() {
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, width, height);
+
+        // Support Frame
+        ctx.fillStyle = '#111';
+        ctx.fillRect(startX - 60, 130, (ballRadius * 2 * numBalls) + 60, 20);
+
+        solveCollisions();
+
+        pendulums.forEach(p => {
+            p.update();
+            p.draw();
+        });
+
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+</script>
+</body>
+</html>

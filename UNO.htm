@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3D UNO 4-Player - etscooly Pro</title>
+    <style>
+        :root {
+            --red: #eb1c24; --blue: #00a2e8; --green: #22b14c; --yellow: #ffde17; --black: #231f20;
+        }
+
+        body { 
+            background: radial-gradient(circle at center, #a3382f, #4d1410, #110404); 
+            color: white; font-family: 'Arial Black', sans-serif; 
+            margin: 0; height: 100vh; overflow: hidden;
+            display: flex; flex-direction: column; align-items: center;
+            perspective: 1500px;
+        }
+
+        /* UI Elements */
+        .player-label {
+            position: absolute; font-size: 1.1rem; text-transform: uppercase;
+            letter-spacing: 2px; opacity: 0.4; transition: all 0.4s ease;
+            pointer-events: none; z-index: 100;
+        }
+        .active-label { opacity: 1; transform: scale(1.3); color: var(--yellow); text-shadow: 0 0 20px var(--yellow); }
+
+        #uno-btn {
+            position: absolute; bottom: 30px; right: 50px;
+            width: 80px; height: 80px; background: var(--red);
+            border: 4px solid white; border-radius: 50%;
+            color: white; font-weight: bold; cursor: pointer;
+            box-shadow: 0 0 20px rgba(255,0,0,0.5);
+            display: flex; justify-content: center; align-items: center;
+            transition: transform 0.2s; z-index: 1000;
+        }
+        #uno-btn:active { transform: scale(0.9); }
+
+        /* Card Styling */
+        .card {
+            width: 75px; height: 115px;
+            border-radius: 8px; border: 3px solid white;
+            position: absolute; cursor: grab;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.6);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+            transform-style: preserve-3d;
+            user-select: none;
+        }
+
+        .card-front, .card-back {
+            position: absolute; width: 100%; height: 100%;
+            backface-visibility: hidden; border-radius: 6px;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        .card-front::before {
+            content: ''; position: absolute; width: 110%; height: 75%;
+            background: white; top: 12%; left: -5%; border-radius: 50%;
+            transform: rotate(-25deg); z-index: 1;
+        }
+
+        .card-value {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(-25deg);
+            font-size: 1.8rem; z-index: 2; font-style: italic; color: inherit;
+        }
+
+        .card-back { background: var(--black); transform: rotateY(180deg); border: 2px solid white; }
+        .card-back::after { 
+            content: 'UNO'; position: absolute; width: 80%; height: 50%; 
+            background: var(--red); border-radius: 50%; display: flex; 
+            justify-content: center; align-items: center; transform: rotate(-20deg);
+            color: white; font-size: 1rem; border: 1.5px solid white;
+        }
+
+        .red .card-front { background: var(--red); color: var(--red); }
+        .blue .card-front { background: var(--blue); color: var(--blue); }
+        .green .card-front { background: var(--green); color: var(--green); }
+        .yellow .card-front { background: var(--yellow); color: var(--yellow); }
+        .wild .card-front { background: var(--black); color: white; }
+        .wild .card-front::before { background: linear-gradient(45deg, var(--red), var(--blue), var(--green), var(--yellow)); }
+
+        #table { flex-grow: 1; width: 100%; display: flex; justify-content: center; align-items: center; position: relative; }
+        .hand { position: absolute; display: flex; justify-content: center; align-items: center; }
+
+        #player-0 { bottom: 80px; width: 100%; height: 120px; }
+        #player-1 { left: 80px; width: 150px; height: 100%; flex-direction: column; transform: rotateY(40deg); }
+        #player-2 { top: 80px; width: 100%; height: 120px; transform: rotateX(-40deg); }
+        #player-3 { right: 80px; width: 150px; height: 100%; flex-direction: column; transform: rotateY(-40deg); }
+
+        #center-zone { display: flex; gap: 40px; align-items: center; transform: rotateX(20deg); }
+        #discard-pile { width: 90px; height: 130px; position: relative; transform-style: preserve-3d; }
+        #deck { 
+            width: 85px; height: 125px; background: #111; border: 3px solid white;
+            border-radius: 10px; cursor: pointer; display: flex; justify-content: center; align-items: center; 
+            transform: rotateZ(-5deg); box-shadow: -10px 10px 20px rgba(0,0,0,0.8); color: var(--red);
+        }
+
+        #pillar-container {
+            display: none; position: absolute; top: -100px; left: 50%;
+            transform: translateX(-50%); width: 200px; height: 200px;
+            transform-style: preserve-3d; z-index: 10000;
+        }
+        .pillar { position: absolute; width: 55px; height: 110px; transform-style: preserve-3d; cursor: pointer; transition: transform 0.2s; }
+        .pillar:hover { transform: scale(1.1) translateZ(20px); }
+        .side { position: absolute; width: 55px; height: 110px; border: 1px solid rgba(255,255,255,0.2); }
+        .f-top { width: 55px; height: 55px; transform: rotateX(90deg) translateZ(27px); top: -27px; }
+        .p-red { transform: translate3d(0, 70px, 40px); } .p-blue { transform: translate3d(-70px, 0, 40px); }
+        .p-green { transform: translate3d(0, -70px, 40px); } .p-yellow { transform: translate3d(70px, 0, 40px); }
+        .red-b .side { background: #d32f2f; } .blue-b .side { background: #0277bd; }
+        .green-b .side { background: #2e7d32; } .yellow-b .side { background: #f9a825; }
+        .f-front { transform: translateZ(27.5px); } .f-back { transform: rotateY(180deg) translateZ(27.5px); }
+        .f-right { transform: rotateY(90deg) translateZ(27.5px); } .f-left { transform: rotateY(-90deg) translateZ(27.5px); }
+    </style>
+</head>
+<body>
+
+    <div id="uno-btn" onclick="sayUno()">UNO</div>
+
+    <div id="table">
+        <div id="label-2" class="player-label" style="top: 25px;">AI Opponent 2</div>
+        <div id="label-1" class="player-label" style="left: 20px; transform: rotate(90deg);">AI Opponent 1</div>
+        <div id="label-3" class="player-label" style="right: 20px; transform: rotate(-90deg);">AI Opponent 3</div>
+        <div id="label-0" class="player-label" style="bottom: 25px;">etscooly</div>
+
+        <div id="player-2" class="hand"></div>
+        <div id="player-1" class="hand"></div>
+        <div id="player-3" class="hand"></div>
+
+        <div id="center-zone">
+            <div id="deck" onclick="drawCard()">UNO</div>
+            <div id="discard-pile">
+                <div id="pillar-container">
+                    <div class="pillar p-red red-b" onclick="finishWild('red')"><div class="side f-front"></div><div class="side f-back"></div><div class="side f-right"></div><div class="side f-left"></div><div class="side f-top"></div></div>
+                    <div class="pillar p-blue blue-b" onclick="finishWild('blue')"><div class="side f-front"></div><div class="side f-back"></div><div class="side f-right"></div><div class="side f-left"></div><div class="side f-top"></div></div>
+                    <div class="pillar p-green green-b" onclick="finishWild('green')"><div class="side f-front"></div><div class="side f-back"></div><div class="side f-right"></div><div class="side f-left"></div><div class="side f-top"></div></div>
+                    <div class="pillar p-yellow yellow-b" onclick="finishWild('yellow')"><div class="side f-front"></div><div class="side f-back"></div><div class="side f-right"></div><div class="side f-left"></div><div class="side f-top"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="player-0" class="hand"></div>
+    </div>
+
+<script>
+    let deck = [], hands = [[], [], [], []], turn = 0, currentColor = "", lastValue = "", gameActive = true;
+    let hasSaidUno = false;
+    const colors = ['red', 'blue', 'green', 'yellow'];
+
+    function createDeck() {
+        colors.forEach(c => {
+            for(let i=0; i<=9; i++) deck.push({color: c, value: i.toString()});
+            ['Skip', '+2'].forEach(v => deck.push({color: c, value: v}));
+        });
+        for(let i=0; i<4; i++) deck.push({color: 'wild', value: 'WILD'});
+        deck.sort(() => Math.random() - 0.5);
+    }
+
+    function init() {
+        createDeck();
+        for(let p=0; p<4; p++) for(let i=0; i<7; i++) hands[p].push(deck.pop());
+        let first = deck.pop();
+        while(first.color === 'wild') first = deck.pop();
+        updateDiscard(first);
+        render();
+    }
+
+    function render() {
+        for(let p=0; p<4; p++) {
+            const el = document.getElementById(`player-${p}`);
+            const label = document.getElementById(`label-${p}`);
+            el.innerHTML = '';
+            label.className = `player-label ${turn === p ? 'active-label' : ''}`;
+            
+            hands[p].forEach((c, i) => {
+                const card = document.createElement('div');
+                card.className = `card ${c.color}`;
+                card.innerHTML = `<div class="card-front"><div class="card-value">${c.value}</div></div><div class="card-back"></div>`;
+                const offset = (i - (hands[p].length - 1) / 2);
+                
+                if (p === 0) {
+                    card.style.transform = `translateX(${offset * 50}px) translateY(${Math.abs(offset) * 8}px) rotate(${offset * 5}deg)`;
+                    card.onmousedown = (e) => startDrag(e, c, i);
+                } else {
+                    if (p === 2) card.style.transform = `translateX(${offset * 25}px) rotateY(180deg)`;
+                    else if (p === 1) card.style.transform = `translateY(${offset * 15}px) rotateY(180deg) rotateZ(90deg)`;
+                    else card.style.transform = `translateY(${offset * 15}px) rotateY(180deg) rotateZ(-90deg)`;
+                }
+                el.appendChild(card);
+            });
+        }
+    }
+
+    function updateDiscard(card) {
+        const pile = document.getElementById('discard-pile');
+        const el = document.createElement('div');
+        el.className = `card ${card.color}`;
+        el.innerHTML = `<div class="card-front"><div class="card-value">${card.value}</div></div>`;
+        el.style.transform = `rotate(${Math.random() * 40 - 20}deg) translateZ(${pile.children.length}px)`;
+        pile.appendChild(el);
+        currentColor = card.color; lastValue = card.value;
+    }
+
+    function startDrag(e, cardData, index) {
+        if (turn !== 0 || !gameActive) return;
+
+        // Create a clone for dragging so original stays or disappears cleanly
+        const dragEl = document.createElement('div');
+        dragEl.className = `card ${cardData.color}`;
+        dragEl.innerHTML = `<div class="card-front"><div class="card-value">${cardData.value}</div></div>`;
+        dragEl.style.position = 'fixed';
+        dragEl.style.zIndex = '10000';
+        dragEl.style.pointerEvents = 'none';
+        dragEl.style.left = (e.clientX - 37) + 'px';
+        dragEl.style.top = (e.clientY - 57) + 'px';
+        document.body.appendChild(dragEl);
+
+        function move(ev) {
+            dragEl.style.left = (ev.clientX - 37) + 'px';
+            dragEl.style.top = (ev.clientY - 57) + 'px';
+        }
+
+        function stop(ev) {
+            window.removeEventListener('mousemove', move);
+            window.removeEventListener('mouseup', stop);
+            
+            const pileRect = document.getElementById('discard-pile').getBoundingClientRect();
+            const inPile = (ev.clientX > pileRect.left - 50 && ev.clientX < pileRect.right + 50 && 
+                           ev.clientY > pileRect.top - 50 && ev.clientY < pileRect.bottom + 50);
+
+            if (inPile && (cardData.color === 'wild' || cardData.color === currentColor || cardData.value === lastValue)) {
+                hands[0].splice(index, 1);
+                
+                // UNO Rule Check
+                if (hands[0].length === 1 && !hasSaidUno) {
+                    alert("Forgot to say UNO! Draw 2 cards.");
+                    hands[0].push(deck.pop(), deck.pop());
+                }
+                hasSaidUno = false; 
+
+                if (cardData.color === 'wild') {
+                    document.getElementById('pillar-container').style.display = 'block';
+                    gameActive = false;
+                } else {
+                    updateDiscard(cardData);
+                    nextTurn();
+                }
+            }
+            dragEl.remove();
+            render();
+        }
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', stop);
+    }
+
+    function sayUno() {
+        if (hands[0].length <= 2) {
+            hasSaidUno = true;
+            document.getElementById('uno-btn').style.background = 'gold';
+            setTimeout(() => document.getElementById('uno-btn').style.background = 'var(--red)', 1000);
+        }
+    }
+
+    function nextTurn() {
+        if (hands[turn].length === 0) {
+            alert(turn === 0 ? "You Win!" : `AI Opponent ${turn} Wins!`);
+            location.reload();
+            return;
+        }
+        turn = (turn + 1) % 4;
+        render();
+        if (turn !== 0) setTimeout(aiTurn, 1200);
+    }
+
+    function aiTurn() {
+        const moveIdx = hands[turn].findIndex(c => c.color === 'wild' || c.color === currentColor || c.value === lastValue);
+        if (moveIdx !== -1) {
+            const card = hands[turn].splice(moveIdx, 1)[0];
+            if (card.color === 'wild') card.color = colors[Math.floor(Math.random()*4)];
+            updateDiscard(card);
+        } else {
+            if (deck.length > 0) hands[turn].push(deck.pop());
+        }
+        nextTurn();
+    }
+
+    function drawCard() { if(turn === 0 && gameActive) { hands[0].push(deck.pop()); nextTurn(); } }
+
+    function finishWild(c) {
+        currentColor = c;
+        document.getElementById('pillar-container').style.display = 'none';
+        updateDiscard({color: c, value: 'WILD'});
+        gameActive = true;
+        nextTurn();
+    }
+
+    init();
+</script>
+</body>
+</html>

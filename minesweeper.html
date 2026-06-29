@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Minesweeper Ultimate</title>
+<style>
+body {font-family: Arial; display:flex; justify-content:center; margin-top:20px; background:white; color:black;}
+body.dark {background:#222;color:white;}
+#game {display:grid; gap:2px;}
+.cell {width:32px; height:32px; background:lightgray; text-align:center; line-height:32px; font-weight:bold; cursor:pointer; user-select:none; transition: transform 0.1s, background 0.2s;}
+.cell:active{transform:scale(0.85);}
+.revealed {background:#bbb;}
+.mine {background:red;}
+.flag {background:yellow;}
+.question {background:orange;}
+.n1 {color:blue;}
+.n2 {color:green;}
+.n3 {color:red;}
+.n4 {color:purple;}
+.n5 {color:brown;}
+.n6 {color:teal;}
+.n7 {color:black;}
+.n8 {color:gray;}
+#side {margin-left:20px; width:160px;}
+button {display:block;margin-bottom:5px;padding:6px;width:150px;}
+.hex .cell {clip-path: polygon(25% 5%, 75% 5%,100% 50%,75% 95%,25% 95%,0% 50%);}
+#leaderboard {font-size:12px;border-top:1px solid gray;margin-top:10px;padding-top:5px;}
+</style>
+</head>
+<body>
+
+<div id="game"></div>
+
+<div id="side">
+<button onclick="newGame()">New Game</button>
+<button onclick="toggleWallHack()">Wall Hack</button>
+<button onclick="toggleDarkMode()">Dark Mode</button>
+<button onclick="toggleHex()">Hex Mode</button>
+<button onclick="customBoard()">Custom Size</button>
+<button onclick="toggleEditor()">Map Editor</button>
+<button onclick="pauseTimer()">Pause Timer</button>
+
+<p>Mines Left: <span id="mineCounter">0</span></p>
+<p>Time: <span id="timer">0</span></p>
+<p>Best: <span id="bestTime">-</span></p>
+
+<div id="leaderboard">
+<b>Leaderboard</b>
+<div id="scores"></div>
+</div>
+</div>
+
+<script>
+let size=10,minesCount=15,board=[],wallHack=false,revealedCount=0,flags=0,time=0,firstClick=true,timerInterval,paused=false,editorMode=false,bestTime=localStorage.getItem("bestTime")||"-",scores=JSON.parse(localStorage.getItem("scores")||"[]");
+const game=document.getElementById("game");document.getElementById("bestTime").innerText=bestTime;
+
+const clickSound=new Audio("https://www.soundjay.com/buttons/sounds/button-16.mp3");
+const winSound=new Audio("https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3");
+const loseSound=new Audio("https://www.soundjay.com/misc/sounds/fail-buzzer-02.mp3");
+
+function updateLeaderboard(){let html="";scores.sort((a,b)=>a-b).slice(0,5).forEach(s=>{html+=s+" sec<br>"});document.getElementById("scores").innerHTML=html;}updateLeaderboard();
+
+function startTimer(){clearInterval(timerInterval);time=0;timerInterval=setInterval(()=>{if(!paused){time++;document.getElementById("timer").innerText=time;}},1000);}
+function pauseTimer(){paused=!paused;}
+function newGame(){createBoard();}
+function customBoard(){let s=prompt("Board size:",size); let m=prompt("Mines:",minesCount); if(s&&m){size=parseInt(s); minesCount=parseInt(m); createBoard();}}
+function toggleEditor(){editorMode=!editorMode; alert(editorMode?"Editor ON":"Editor OFF");}
+function toggleHex(){game.classList.toggle("hex");}
+function createBoard(){
+board=[];game.innerHTML="";revealedCount=0;flags=0;firstClick=true;
+game.style.gridTemplateColumns=`repeat(${size},32px)`; game.style.gridTemplateRows=`repeat(${size},32px)`;
+document.getElementById("mineCounter").innerText=minesCount;
+for(let i=0;i<size;i++){board[i]=[]; for(let j=0;j<size;j++){board[i][j]={mine:false,revealed:false,state:0}; const cell=document.createElement("div"); cell.className="cell"; cell.dataset.x=i; cell.dataset.y=j; cell.onclick=clickCell; cell.oncontextmenu=(e)=>{e.preventDefault();cycleMark(cell);}; game.appendChild(cell);}}
+if(!editorMode) placeMines(); startTimer();
+}
+function placeMines(excludeX=-1,excludeY=-1){let placed=0; while(placed<minesCount){let x=Math.floor(Math.random()*size); let y=Math.floor(Math.random()*size); if(x===excludeX&&y===excludeY) continue; if(!board[x][y].mine){board[x][y].mine=true; placed++;}}}
+function clickCell(){clickSound.play(); const x=parseInt(this.dataset.x); const y=parseInt(this.dataset.y); if(editorMode){board[x][y].mine=!board[x][y].mine; this.style.background=board[x][y].mine?"red":""; return;} if(board[x][y].state===1) return; if(firstClick){firstClick=false; if(board[x][y].mine){board[x][y].mine=false; placeMines(x,y);}} if(board[x][y].mine){this.classList.add("mine"); loseSound.play(); alert("Game Over"); createBoard(); return;} floodFill(x,y); checkWin();}
+function floodFill(x,y){if(x<0||y<0||x>=size||y>=size) return; if(board[x][y].revealed||board[x][y].state===1) return; const cell=getCell(x,y); const mines=countMines(x,y); board[x][y].revealed=true; revealedCount++; setTimeout(()=>{cell.classList.add("revealed"); if(mines>0){cell.innerText=mines; cell.classList.add("n"+mines);}else{for(let i=-1;i<=1;i++) for(let j=-1;j<=1;j++) floodFill(x+i,y+j);}},20);}
+function cycleMark(cell){const x=cell.dataset.x; const y=cell.dataset.y; if(board[x][y].revealed) return; board[x][y].state=(board[x][y].state+1)%3; cell.classList.remove("flag","question"); if(board[x][y].state===1){cell.classList.add("flag"); flags++;} else if(board[x][y].state===2){cell.classList.add("question"); flags--;} else{flags--;} document.getElementById("mineCounter").innerText=minesCount-flags;}
+function getCell(x,y){return document.querySelector(`.cell[data-x='${x}'][data-y='${y}']`);}
+function countMines(x,y){let count=0; for(let i=-1;i<=1;i++) for(let j=-1;j<=1;j++){let nx=x+i; let ny=y+j; if(nx>=0&&ny>=0&&nx<size&&ny<size) if(board[nx][ny].mine) count++;} return count;}
+function checkWin(){if(revealedCount===size*size-minesCount){clearInterval(timerInterval); winSound.play(); alert("You Win! Time: "+time); if(bestTime==="-"||time<bestTime){bestTime=time; localStorage.setItem("bestTime",bestTime); document.getElementById("bestTime").innerText=bestTime;} scores.push(time); localStorage.setItem("scores",JSON.stringify(scores)); updateLeaderboard(); createBoard();}}
+function toggleWallHack(){wallHack=!wallHack; const cells=document.querySelectorAll(".cell"); cells.forEach(cell=>{const x=cell.dataset.x; const y=cell.dataset.y; if(board[x][y].mine && wallHack){cell.style.background="orange";}else if(!board[x][y].revealed){cell.style.background="";}});}
+function toggleDarkMode(){document.body.classList.toggle("dark");}
+createBoard();
+</script>
+
+</body>
+</html>
