@@ -14,7 +14,7 @@
             height: 100vh;
             padding: 20px;
         }
-        input, button {
+        input, button, label {
             padding: 10px;
             font-size: 16px;
             margin: 5px;
@@ -23,20 +23,40 @@
         }
         button { background: #00ffcc; cursor: pointer; font-weight: bold; }
         button:hover { background: #00ddb3; }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
     <h1>Text-to-Speech</h1>
     <input type="text" id="text" placeholder="Type something to speak..." size="50">
+    
+    <div class="control-group">
+        <label for="volume">Volume: <span id="volValue">100</span>%</label>
+        <input type="range" id="volume" min="0" max="100" step="1" value="100">
+    </div>
+
     <button id="speak">Speak</button>
 
     <script>
+        const volumeInput = document.getElementById("volume");
+        const volValue = document.getElementById("volValue");
+
+        volumeInput.addEventListener("input", () => {
+            volValue.textContent = volumeInput.value;
+        });
+
         document.getElementById("speak").addEventListener("click", () => {
             const text = document.getElementById("text").value;
             if(!text) return alert("Type something first!");
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.rate = 1; // speed
             utterance.pitch = 1; // tone
+            utterance.volume = volumeInput.value / 100; // convert 0-100 to 0-1 range for Web Speech API
             speechSynthesis.speak(utterance);
         });
     </script>
