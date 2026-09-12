@@ -5,39 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My HTML Arcade</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        * {
+            box-sizing: border-box;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
             background-color: #1a1a1a;
             color: #ffffff;
+            font-family: Arial, sans-serif;
             text-align: center;
-            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        body {
+            padding: 15px;
         }
         h1 {
             color: #00ffcc;
+            margin: 0 0 5px 0;
+            font-size: 1.8rem;
+        }
+        p.subtitle {
+            margin: 0 0 15px 0;
+            font-size: 0.95rem;
+            color: #cccccc;
         }
         .game-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 12px;
+            width: 100%;
             max-width: 900px;
-            margin: 30px auto 20px auto;
+            margin: 0 auto;
         }
         .game-card {
             background-color: #2a2a2a;
-            padding: 20px;
+            padding: 12px 10px;
             border-radius: 8px;
-            border: 2px solid #333;
+            border: 2px solid #333333;
             transition: transform 0.2s, border-color 0.2s;
             cursor: pointer;
         }
         .game-card:hover {
-            transform: scale(1.05);
+            transform: scale(1.03);
             border-color: #00ffcc;
         }
         a {
             color: #ffffff;
             text-decoration: none;
-            font-size: 1.2rem;
+            font-size: 1rem;
             font-weight: bold;
             display: flex;
             align-items: center;
@@ -46,21 +66,20 @@
             height: 100%;
         }
         .disclaimer {
-            margin-top: 20px;
-            font-size: 0.9rem;
-            color: #888888;
-            border-top: 1px solid #333;
-            padding-top: 15px;
+            margin-top: 15px;
+            font-size: 0.7rem;
+            color: #555555;
+            border-top: 1px solid #2a2a2a;
+            padding-top: 8px;
+            width: 100%;
             max-width: 900px;
-            margin-left: auto;
-            margin-right: auto;
         }
     </style>
 </head>
 <body>
 
     <h1>🎮 Welcome to My Arcade 🎮</h1>
-    <p>Click on any game or app below to open it instantly!</p>
+    <p class="subtitle">Click on any game or app below to open it instantly!</p>
 
     <div class="game-grid">
         <div class="game-card"><a href="UNO.htm">🃏 UNO</a></div>
