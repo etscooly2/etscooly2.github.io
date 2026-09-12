@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eden Family Survival & Scavenging Simulation v2.0</title>
+    <style>
+        :root {
+            --bg-color: #030508;
+            --panel-bg: #0b0f17;
+            --card-bg: #121824;
+            --border-color: #212c3d;
+            --text-main: #e6edf3;
+            --text-sub: #8b949e;
+            --accent-cyan: #38edf6;
+            --accent-green: #3fb950;
+            --accent-pink: #f778ba;
+            --accent-orange: #f0883e;
+            --accent-purple: #a371f7;
+            --accent-red: #f85149;
+            --accent-yellow: #d29922;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Liberation Mono", monospace;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: -webkit-fill-available;
+            overflow: hidden;
+        }
+
+        #sim-viewport {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #020305;
+            min-height: 38vh;
+            width: 100%;
+        }
+
+        canvas {
+            border: 1px solid var(--border-color);
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
+            border-radius: 8px;
+            touch-action: none;
+        }
+
+        .hud-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            font-size: 0.7rem;
+        }
+
+        .hud-badge {
+            background: rgba(11, 15, 23, 0.9);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(8px);
+            padding: 6px 10px;
+            border-radius: 6px;
+            color: var(--accent-cyan);
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        #ui-panel {
+            width: 100%;
+            height: 62vh;
+            background-color: var(--panel-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.8);
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            background-color: var(--bg-color);
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-sub);
+            padding: 6px 2px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background-color: var(--card-bg);
+            color: var(--accent-cyan);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        .control-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-header {
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: var(--text-main);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .control-val {
+            color: var(--accent-cyan);
+            font-family: monospace;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 16px;
+            accent-color: var(--accent-cyan);
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+
+        .btn {
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 6px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        .btn-accent {
+            background-color: #1f6beb;
+            color: #fff;
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .metric-card {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .metric-label {
+            font-size: 0.55rem;
+            color: var(--text-sub);
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            font-size: 0.75rem;
+            font-weight: bold;
+            font-family: monospace;
+            color: var(--accent-green);
+        }
+
+        .roster-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .roster-filter-btn {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--accent-cyan);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            cursor: pointer;
+            font-family: monospace;
+        }
+
+        .roster-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 180px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .roster-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 6px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.65rem;
+            font-family: monospace;
+            cursor: pointer;
+        }
+
+        .roster-card:hover, .roster-card.active {
+            border-color: var(--accent-cyan);
+            background-color: #1a2332;
+        }
+
+        .roster-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .roster-pills {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .pill {
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 0.55rem;
+            font-weight: bold;
+        }
+
+        .pill-male { background: rgba(56, 237, 246, 0.2); color: var(--accent-cyan); }
+        .pill-female { background: rgba(247, 120, 186, 0.2); color: var(--accent-pink); }
+        .pill-sick { background: rgba(248, 81, 73, 0.25); color: var(--accent-red); }
+        .pill-mood { background: rgba(210, 153, 34, 0.25); color: var(--accent-yellow); }
+
+        .inspector-box {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 0.65rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        @media (min-width: 768px) {
+            body { flex-direction: row; }
+            #sim-viewport { height: 100vh; }
+            #ui-panel {
+                width: 440px;
+                height: 100vh;
+                border-top: none;
+                border-left: 1px solid var(--border-color);
+                border-radius: 0;
+                padding: 16px;
+                gap: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="sim-viewport">
+    <div class="hud-overlay">
+        <div class="hud-badge" id="hud-weather">WEATHER: CLEAR</div>
+        <div class="hud-badge" id="hud-time">Year 1, Day 001 (08:00)</div>
+    </div>
+    <canvas id="worldCanvas"></canvas>
+</div>
+
+<div id="ui-panel">
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('roster')">Directory</button>
+        <button class="tab-btn" onclick="switchTab('scenarios')">Controls</button>
+        <button class="tab-btn" onclick="switchTab('disasters')">Hazards</button>
+        <button class="tab-btn" onclick="switchTab('inspector')">Inspector</button>
+    </div>
+
+    <div class="tab-content active" id="tab-roster">
+        <div class="roster-header">
+            <span style="font-size:0.75rem; font-weight:bold;">Citizens Directory</span>
+            <button class="roster-filter-btn" id="btn-sort" onclick="toggleSortOrder()">SORT: OLDEST FIRST 🔻</button>
+        </div>
+        <div class="roster-list" id="roster-container"></div>
+    </div>
+
+    <div class="tab-content" id="tab-scenarios">
+        <div class="control-card">
+            <div class="control-header"><span>Simulation Commands</span></div>
+            <div class="btn-grid">
+                <button class="btn btn-accent" onclick="initEdenScenario()">🌿 Reset Scenario</button>
+                <button class="btn" onclick="addFamilyChild()">👶 Birth Child</button>
+                <button class="btn" id="btn-pause" onclick="togglePause()">⏸️ Pause</button>
+                <button class="btn" onclick="resetWorld()">💥 Clear World</button>
+            </div>
+        </div>
+
+        <div class="control-card">
+            <div class="control-header">
+                <span>Simulation Speed</span>
+                <span class="control-val" id="val-speed">1.0x</span>
+            </div>
+            <input type="range" id="slider-speed" min="0.1" max="5.0" step="0.1" value="1.0" oninput="updateSimData()">
+        </div>
+
+        <div class="control-card">
+            <div class="control-header">
+                <span>Metabolic Drain Rate</span>
+                <span class="control-val" id="val-hunger">1.0x</span>
+            </div>
+            <input type="range" id="slider-hunger" min="0.2" max="3.0" step="0.1" value="1.0" oninput="updateSimData()">
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-disasters">
+        <div class="control-card">
+            <div class="control-header"><span>Manual Triggers</span></div>
+            <div class="btn-grid">
+                <button class="btn" onclick="triggerVirusOutbreak()" style="color:var(--accent-red)">🦠 Trigger Illness</button>
+                <button class="btn" onclick="triggerLightningStrike()" style="color:var(--accent-yellow)">⚡ Strike Lightning</button>
+                <button class="btn" onclick="triggerStormEvent()" style="color:var(--accent-cyan)">⛈️ Severe Storm</button>
+                <button class="btn" onclick="makeSomeoneAngry()" style="color:var(--accent-orange)">😡 Induce Conflict</button>
+            </div>
+        </div>
+
+        <div class="control-card">
+            <div class="control-header">
+                <span>Contagion Rate</span>
+                <span class="control-val" id="val-virusrate">30%</span>
+            </div>
+            <input type="range" id="slider-virusrate" min="0.05" max="0.9" step="0.05" value="0.3" oninput="updateSimData()">
+        </div>
+    </div>
+
+    <div class="tab-content" id="tab-inspector">
+        <div class="inspector-box" id="inspector-content">
+            <div>Select a human from the map or directory to inspect detailed telemetry, mood, intelligence, and inventory.</div>
+        </div>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <span class="metric-label">Population</span>
+            <span class="metric-value" id="m-pop">0</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Home Food</span>
+            <span class="metric-value" id="m-food">0</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Home Water</span>
+            <span class="metric-value" id="m-water" style="color:var(--accent-cyan)">0</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Infected</span>
+            <span class="metric-value" id="m-sick" style="color:var(--accent-red)">0</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('worldCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let isPaused = false;
+    let simSpeed = 1.0;
+    let hungerMultiplier = 1.0;
+    let virusContagionRate = 0.3;
+
+    let sortOldestFirst = true;
+
+    let dayMinutes = 480;
+    let currentDay = 1;
+    let currentYear = 1;
+
+    let weatherState = 'CLEAR';
+    let stormTimer = 0;
+
+    let selectedHuman = null;
+
+    let humans = [];
+    let foodBushes = [];
+    let waterSources = [];
+    let familyHome = null;
+
+    let mapWidth = 500;
+    let mapHeight = 500;
+
+    function resizeCanvas() {
+        const viewport = document.getElementById('sim-viewport');
+        const isDesktop = window.innerWidth >= 768;
+        let size = isDesktop ? Math.min(viewport.clientWidth - 40, viewport.clientHeight - 40, 600)
+                             : Math.min(viewport.clientWidth - 20, viewport.clientHeight - 20, 340);
+        canvas.width = size;
+        canvas.height = size;
+        mapWidth = size;
+        mapHeight = size;
+    }
+
+    class Human {
+        constructor(x, y, sex, name, role = 'MEMBER', fatherId = null, motherId = null, generation = 1, genome = null) {
+            this.id = Math.floor(Math.random() * 900000) + 100000;
+            this.x = x;
+            this.y = y;
+            this.sex = sex;
+            this.name = name;
+            this.role = role;
+            this.fatherId = fatherId;
+            this.motherId = motherId;
+            this.generation = generation;
+
+            // Inheritance & Evolution Attributes
+            this.genome = genome || {
+                intelligence: Math.random() * 0.4 + 0.8, // Affects Scavenging Carry Capacity & Speed
+                immunity: Math.random() * 0.4 + 0.7,     // Resistance to Sickness
+                resilience: Math.random() * 0.4 + 0.8    // Energy efficiency
+            };
+
+            this.age = role === 'CHILD' ? 4.0 : 22.0;
+            this.health = 100.0;
+            this.hunger = 0.0;
+            this.thirst = 0.0;
+            this.energy = 100.0;
+
+            this.mood = 'HAPPY'; // 'HAPPY', 'NEUTRAL', 'ANGRY', 'SAD', 'FEARFUL'
+            this.moodTimer = 0;
+
+            this.isInfected = false;
+            this.infectionTimer = 0;
+
+            this.inventory = { food: 0, water: 0 };
+            this.maxCarry = Math.floor(3 * this.genome.intelligence);
+
+            this.state = 'IDLE';
+            this.targetX = x;
+            this.targetY = y;
+
+            this.speed = (role === 'CHILD' ? 1.3 : 1.1) * (0.8 + 0.3 * this.genome.intelligence);
+            this.color = sex === 'M' ? '#38edf6' : '#f778ba';
+        }
+
+        update(dt) {
+            this.age += (dt / 100);
+
+            let isNight = (dayMinutes < 360 || dayMinutes > 1260);
+
+            // Metabolism Logic
+            this.hunger += 0.08 * dt * hungerMultiplier;
+            this.thirst += 0.12 * dt * hungerMultiplier;
+
+            if (this.state === 'SLEEP') {
+                this.energy = Math.min(100, this.energy + 0.35 * dt * this.genome.resilience);
+            } else {
+                this.energy = Math.max(0, this.energy - (0.06 / this.genome.resilience) * dt);
+            }
+
+            // Health Computations
+            if (this.hunger > 80 || this.thirst > 80) this.health -= 0.2 * dt;
+            if (weatherState === 'STORM' && this.state !== 'SLEEP' && !this.isAtHome()) this.health -= 0.08 * dt;
+            if (this.health < 100 && this.hunger < 30 && this.thirst < 30 && !this.isInfected) {
+                this.health += 0.05 * dt;
+            }
+
+            // Dynamic Emotional Processing
+            if (this.moodTimer > 0) {
+                this.moodTimer -= dt;
+                if (this.moodTimer <= 0) this.mood = 'NEUTRAL';
+            }
+            if (this.hunger > 65 || this.thirst > 65 || this.energy < 15) {
+                this.mood = 'ANGRY';
+            } else if (this.health < 45) {
+                this.mood = 'SAD';
+            }
+
+            // Contagion Handling
+            if (this.isInfected) {
+                this.infectionTimer += dt;
+                this.health -= (0.18 / this.genome.immunity) * dt;
+
+                for (let other of humans) {
+                    if (other !== this && !other.isInfected) {
+                        let d = Math.hypot(other.x - this.x, other.y - this.y);
+                        if (d < 18 && Math.random() < virusContagionRate * 0.05) {
+                            other.isInfected = true;
+                        }
+                    }
+                }
+            }
+
+            // High Level Utility Brain Evaluation
+            this.evaluateBehavior(isNight);
+
+            // Movement Processing
+            let dx = this.targetX - this.x;
+            let dy = this.targetY - this.y;
+            let dist = Math.hypot(dx, dy);
+
+            if (dist > 3) {
+                this.x += (dx / dist) * this.speed * simSpeed;
+                this.y += (dy / dist) * this.speed * simSpeed;
+            } else {
+                this.executeTargetAction();
+            }
+        }
+
+        isAtHome() {
+            return familyHome && Math.hypot(familyHome.x - this.x, familyHome.y - this.y) < 20;
+        }
+
+        evaluateBehavior(isNight) {
+            // Priority 1: Sleep
+            if ((this.energy < 20 || isNight || weatherState === 'STORM') && this.state !== 'SLEEP') {
+                this.state = 'SLEEP';
+                if (familyHome) {
+                    this.targetX = familyHome.x;
+                    this.targetY = familyHome.y;
+                }
+                return;
+            }
+
+            if (this.state === 'SLEEP' && !isNight && weatherState !== 'STORM' && this.energy > 85) {
+                this.state = 'IDLE';
+            }
+
+            if (this.state === 'SLEEP') return;
+
+            // Priority 2: Emotional Outburst
+            if (this.mood === 'ANGRY' && Math.random() < 0.01) {
+                this.state = 'ANGRY_OUTBURST';
+                this.targetX = Math.max(20, Math.min(mapWidth - 20, this.x + (Math.random() - 0.5) * 80));
+                this.targetY = Math.max(20, Math.min(mapHeight - 20, this.y + (Math.random() - 0.5) * 80));
+                return;
+            }
+
+            // Priority 3: Consume Household Resources
+            if (familyHome && (this.hunger > 30 || this.thirst > 30)) {
+                if (this.isAtHome()) {
+                    if (this.hunger > 30 && familyHome.food > 0) {
+                        familyHome.food--;
+                        this.hunger = Math.max(0, this.hunger - 45);
+                    }
+                    if (this.thirst > 30 && familyHome.water > 0) {
+                        familyHome.water--;
+                        this.thirst = Math.max(0, this.thirst - 50);
+                    }
+                }
+            }
+
+            // Priority 4: Scavenging Strategy (Dad or Children Scavenge)
+            let homeNeedsFood = familyHome && familyHome.food < 12;
+            let homeNeedsWater = familyHome && familyHome.water < 12;
+
+            if ((this.role === 'DAD' || this.role === 'CHILD' || !familyHome) && (homeNeedsFood || homeNeedsWater || this.hunger > 40 || this.thirst > 40)) {
+                if (this.inventory.food >= this.maxCarry || this.inventory.water >= this.maxCarry) {
+                    this.state = 'RETURN_HOME';
+                    if (familyHome) {
+                        this.targetX = familyHome.x;
+                        this.targetY = familyHome.y;
+                    }
+                    return;
+                }
+
+                if (homeNeedsWater || this.thirst > 40) {
+                    let w = this.findClosest(waterSources);
+                    if (w) {
+                        this.state = 'SCAVENGE_WATER';
+                        this.targetX = w.x;
+                        this.targetY = w.y;
+                        return;
+                    }
+                }
+
+                if (homeNeedsFood || this.hunger > 40) {
+                    let b = this.findClosest(foodBushes.filter(bush => bush.berries > 0));
+                    if (b) {
+                        this.state = 'SCAVENGE_FOOD';
+                        this.targetX = b.x;
+                        this.targetY = b.y;
+                        return;
+                    }
+                }
+            }
+
+            // Priority 5: Wander or Return Home
+            if (this.state === 'IDLE' || Math.random() < 0.02) {
+                if (familyHome && Math.random() < 0.6) {
+                    this.targetX = familyHome.x + (Math.random() - 0.5) * 30;
+                    this.targetY = familyHome.y + (Math.random() - 0.5) * 30;
+                } else {
+                    this.targetX = Math.max(20, Math.min(mapWidth - 20, this.x + (Math.random() - 0.5) * 50));
+                    this.targetY = Math.max(20, Math.min(mapHeight - 20, this.y + (Math.random() - 0.5) * 50));
+                }
+                this.state = 'IDLE';
+            }
+        }
+
+        executeTargetAction() {
+            if (this.state === 'SCAVENGE_FOOD') {
+                let bush = foodBushes.find(b => Math.hypot(b.x - this.x, b.y - this.y) < 12 && b.berries > 0);
+                if (bush) {
+                    bush.berries--;
+                    this.inventory.food++;
+                    this.mood = 'HAPPY';
+                    this.state = 'RETURN_HOME';
+                    if (familyHome) {
+                        this.targetX = familyHome.x;
+                        this.targetY = familyHome.y;
+                    }
+                }
+            } else if (this.state === 'SCAVENGE_WATER') {
+                let water = waterSources.find(w => Math.hypot(w.x - this.x, w.y - this.y) < 18);
+                if (water) {
+                    this.inventory.water++;
+                    this.thirst = Math.max(0, this.thirst - 40);
+                    this.mood = 'HAPPY';
+                    this.state = 'RETURN_HOME';
+                    if (familyHome) {
+                        this.targetX = familyHome.x;
+                        this.targetY = familyHome.y;
+                    }
+                }
+            } else if (this.state === 'RETURN_HOME') {
+                if (familyHome && this.isAtHome()) {
+                    familyHome.food += this.inventory.food;
+                    familyHome.water += this.inventory.water;
+                    this.inventory.food = 0;
+                    this.inventory.water = 0;
+                    this.state = 'IDLE';
+                }
+            }
+        }
+
+        findClosest(list) {
+            let closest = null, minD = Infinity;
+            for (let item of list) {
+                let d = Math.hypot(item.x - this.x, item.y - this.y);
+                if (d < minD) { minD = d; closest = item; }
+            }
+            return closest;
+        }
+
+        draw() {
+            if (selectedHuman === this) {
+                ctx.strokeStyle = '#38edf6';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 9, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.role === 'CHILD' ? 3 : 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (this.isInfected) {
+                ctx.strokeStyle = '#f85149';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 7, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.font = '9px monospace';
+            if (this.mood === 'ANGRY') {
+                ctx.fillStyle = '#f85149';
+                ctx.fillText('😡', this.x + 4, this.y - 4);
+            } else if (this.state === 'SLEEP') {
+                ctx.fillStyle = '#8b949e';
+                ctx.fillText('zZ', this.x + 4, this.y - 4);
+            } else if (this.inventory.food > 0 || this.inventory.water > 0) {
+                ctx.fillStyle = '#3fb950';
+                ctx.fillText('🎒', this.x + 4, this.y - 4);
+            }
+        }
+    }
+
+    function generateEnvironment() {
+        foodBushes = [];
+        waterSources = [];
+
+        for (let i = 0; i < 16; i++) {
+            foodBushes.push({
+                x: Math.random() * (mapWidth - 60) + 30,
+                y: Math.random() * (mapHeight - 60) + 30,
+                berries: 5, maxBerries: 5
+            });
+        }
+
+        waterSources.push({ x: mapWidth * 0.5, y: mapHeight * 0.5 });
+    }
+
+    function initEdenScenario() {
+        humans = [];
+        generateEnvironment();
+        currentDay = 1;
+        currentYear = 1;
+        dayMinutes = 480;
+        weatherState = 'CLEAR';
+
+        familyHome = { x: mapWidth / 2, y: mapHeight / 2 - 40, food: 8, water: 8 };
+
+        let dad = new Human(familyHome.x - 10, familyHome.y, 'M', 'Adam (Dad)', 'DAD');
+        let mom = new Human(familyHome.x + 10, familyHome.y, 'F', 'Eve (Mom)', 'MOM');
+        let kid = new Human(familyHome.x, familyHome.y + 10, 'M', 'Cain (Kid)', 'CHILD', dad.id, mom.id);
+
+        humans.push(dad, mom, kid);
+        selectedHuman = dad;
+
+        renderDirectoryRoster();
+        updateInspectorUI();
+    }
+
+    function addFamilyChild() {
+        let dad = humans.find(h => h.sex === 'M');
+        let mom = humans.find(h => h.sex === 'F');
+        let sex = Math.random() < 0.5 ? 'M' : 'F';
+        let name = sex === 'M' ? `Son_${humans.length}` : `Dau_${humans.length}`;
+
+        let childGenome = {
+            intelligence: Math.min(2.0, ((dad ? dad.genome.intelligence : 1) + (mom ? mom.genome.intelligence : 1)) / 2 + (Math.random() - 0.5) * 0.1),
+            immunity: Math.min(1.0, ((dad ? dad.genome.immunity : 1) + (mom ? mom.genome.immunity : 1)) / 2 + (Math.random() - 0.5) * 0.1),
+            resilience: Math.min(1.5, ((dad ? dad.genome.resilience : 1) + (mom ? mom.genome.resilience : 1)) / 2 + (Math.random() - 0.5) * 0.1)
+        };
+
+        let child = new Human(familyHome.x, familyHome.y, sex, name, 'CHILD', dad ? dad.id : null, mom ? mom.id : null, 2, childGenome);
+        humans.push(child);
+        renderDirectoryRoster();
+    }
+
+    function resetWorld() {
+        humans = [];
+        foodBushes = [];
+        waterSources = [];
+        familyHome = null;
+        selectedHuman = null;
+        renderDirectoryRoster();
+        updateInspectorUI();
+    }
+
+    function triggerVirusOutbreak() {
+        if (humans.length === 0) return;
+        let p = humans[Math.floor(Math.random() * humans.length)];
+        p.isInfected = true;
+        renderDirectoryRoster();
+    }
+
+    function triggerLightningStrike() {
+        let x = Math.random() * (mapWidth - 40) + 20;
+        let y = Math.random() * (mapHeight - 40) + 20;
+        for (let h of humans) {
+            if (Math.hypot(h.x - x, h.y - y) < 30) {
+                h.health -= 40;
+                h.mood = 'FEARFUL';
+                h.moodTimer = 20;
+            }
+        }
+    }
+
+    function triggerStormEvent() {
+        weatherState = 'STORM';
+        stormTimer = 40;
+    }
+
+    function makeSomeoneAngry() {
+        if (humans.length === 0) return;
+        let h = humans[Math.floor(Math.random() * humans.length)];
+        h.mood = 'ANGRY';
+        h.moodTimer = 30;
+        renderDirectoryRoster();
+    }
+
+    function toggleSortOrder() {
+        sortOldestFirst = !sortOldestFirst;
+        document.getElementById('btn-sort').innerText = sortOldestFirst ? "SORT: OLDEST FIRST 🔻" : "SORT: YOUNGEST FIRST 🔺";
+        renderDirectoryRoster();
+    }
+
+    function renderDirectoryRoster() {
+        const container = document.getElementById('roster-container');
+        if (!container) return;
+
+        let sorted = [...humans].sort((a, b) => sortOldestFirst ? b.age - a.age : a.age - b.age);
+
+        container.innerHTML = sorted.map(h => `
+            <div class="roster-card ${selectedHuman === h ? 'active' : ''}" onclick="selectHumanById(${h.id})">
+                <div class="roster-info">
+                    <span style="font-weight:bold; color:#fff;">${h.name} (${h.role})</span>
+                    <span>Age: ${h.age.toFixed(1)} yrs | HP: ${h.health.toFixed(0)}%</span>
+                </div>
+                <div class="roster-pills">
+                    <span class="pill pill-mood">${h.mood}</span>
+                    <span class="pill ${h.sex === 'M' ? 'pill-male' : 'pill-female'}">${h.sex}</span>
+                    ${h.isInfected ? `<span class="pill pill-sick">SICK</span>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function selectHumanById(id) {
+        selectedHuman = humans.find(h => h.id === id) || null;
+        renderDirectoryRoster();
+        updateInspectorUI();
+        switchTab('inspector');
+    }
+
+    function drawSimulation() {
+        ctx.clearRect(0, 0, mapWidth, mapHeight);
+
+        ctx.fillStyle = '#0c140d';
+        ctx.fillRect(0, 0, mapWidth, mapHeight);
+
+        ctx.strokeStyle = '#0e2f44';
+        ctx.lineWidth = 16;
+        ctx.beginPath();
+        ctx.moveTo(0, mapHeight * 0.5);
+        ctx.bezierCurveTo(mapWidth * 0.3, mapHeight * 0.4, mapWidth * 0.7, mapHeight * 0.6, mapWidth, mapHeight * 0.5);
+        ctx.stroke();
+
+        let isNight = (dayMinutes < 360 || dayMinutes > 1260);
+        if (weatherState === 'STORM') {
+            ctx.fillStyle = 'rgba(20, 30, 50, 0.65)';
+            ctx.fillRect(0, 0, mapWidth, mapHeight);
+        } else if (isNight) {
+            ctx.fillStyle = 'rgba(2, 5, 15, 0.45)';
+            ctx.fillRect(0, 0, mapWidth, mapHeight);
+        }
+
+        if (familyHome) {
+            ctx.fillStyle = '#78643c';
+            ctx.fillRect(familyHome.x - 12, familyHome.y - 12, 24, 24);
+            ctx.strokeStyle = '#212c3d';
+            ctx.strokeRect(familyHome.x - 12, familyHome.y - 12, 24, 24);
+            ctx.fillStyle = '#fff';
+            ctx.font = '8px monospace';
+            ctx.fillText('HOME', familyHome.x - 10, familyHome.y - 14);
+        }
+
+        for (let b of foodBushes) {
+            ctx.fillStyle = b.berries > 0 ? '#3fb950' : '#121824';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        let sickCount = 0;
+        let dt = 0.1 * simSpeed;
+
+        for (let i = humans.length - 1; i >= 0; i--) {
+            let h = humans[i];
+            if (!isPaused) h.update(dt);
+            h.draw();
+
+            if (h.isInfected) sickCount++;
+
+            if (h.health <= 0 || h.age >= 80) {
+                if (selectedHuman === h) selectedHuman = null;
+                humans.splice(i, 1);
+                renderDirectoryRoster();
+            }
+        }
+
+        if (!isPaused && Math.random() < 0.04) {
+            let b = foodBushes[Math.floor(Math.random() * foodBushes.length)];
+            if (b && b.berries < b.maxBerries) b.berries++;
+        }
+
+        if (!isPaused && weatherState === 'STORM') {
+            stormTimer -= dt;
+            if (stormTimer <= 0) weatherState = 'CLEAR';
+        }
+
+        if (!isPaused) {
+            dayMinutes += 2 * simSpeed;
+            if (dayMinutes >= 1440) {
+                dayMinutes = 0;
+                currentDay++;
+                if (currentDay > 100) {
+                    currentDay = 1;
+                    currentYear++;
+                }
+                renderDirectoryRoster();
+            }
+            updateClockHUD();
+            if (selectedHuman) updateInspectorUI();
+        }
+
+        document.getElementById('m-pop').innerText = humans.length;
+        document.getElementById('m-food').innerText = familyHome ? familyHome.food : 0;
+        document.getElementById('m-water').innerText = familyHome ? familyHome.water : 0;
+        document.getElementById('m-sick').innerText = sickCount;
+
+        requestAnimationFrame(drawSimulation);
+    }
+
+    function updateClockHUD() {
+        let hrs = Math.floor(dayMinutes / 60);
+        let mins = Math.floor(dayMinutes % 60);
+        let hh = String(hrs).padStart(2, '0');
+        let mm = String(mins).padStart(2, '0');
+
+        document.getElementById('hud-time').innerText = `Year ${currentYear}, Day ${String(currentDay).padStart(3, '0')} (${hh}:${mm})`;
+        document.getElementById('hud-weather').innerText = `WEATHER: ${weatherState}`;
+    }
+
+    function updateInspectorUI() {
+        const box = document.getElementById('inspector-content');
+        if (!selectedHuman) {
+            box.innerHTML = `<div>Select a human from the map or directory to inspect detailed telemetry, mood, intelligence, and inventory.</div>`;
+            return;
+        }
+
+        let h = selectedHuman;
+        box.innerHTML = `
+            <div><strong>NAME:</strong> ${h.name} (${h.role})</div>
+            <div><strong>AGE:</strong> ${h.age.toFixed(1)} yrs | <strong>HEALTH:</strong> ${h.health.toFixed(1)}%</div>
+            <div><strong>MOOD STATE:</strong> <span style="color:var(--accent-yellow)">${h.mood}</span></div>
+            <div><strong>CURRENT AI STATE:</strong> <span style="color:var(--accent-cyan)">${h.state}</span></div>
+            <div><strong>HUNGER:</strong> ${h.hunger.toFixed(1)}% | <strong>THIRST:</strong> ${h.thirst.toFixed(1)}%</div>
+            <div><strong>ENERGY:</strong> ${h.energy.toFixed(1)}%</div>
+            <div><strong>INVENTORY:</strong> ${h.inventory.food} Food, ${h.inventory.water} Water (Max Carry: ${h.maxCarry})</div>
+            <div><strong>SICK:</strong> <span style="color:${h.isInfected ? 'var(--accent-red)' : 'var(--accent-green)'}">${h.isInfected ? 'YES' : 'NO'}</span></div>
+            <div style="border-top:1px solid var(--border-color); margin-top:4px; padding-top:4px;"><strong>GENOME TRAITS:</strong></div>
+            <div>- Intelligence: ${(h.genome.intelligence * 100).toFixed(0)}%</div>
+            <div>- Immunity: ${(h.genome.immunity * 100).toFixed(0)}%</div>
+            <div>- Resilience: ${(h.genome.resilience * 100).toFixed(0)}%</div>
+        `;
+    }
+
+    canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) * (mapWidth / rect.width);
+        const mouseY = (e.clientY - rect.top) * (mapHeight / rect.height);
+
+        let clicked = humans.find(h => Math.hypot(h.x - mouseX, h.y - mouseY) < 12);
+        selectedHuman = clicked || null;
+        renderDirectoryRoster();
+        updateInspectorUI();
+    });
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+        event.target.classList.add('active');
+        document.getElementById(`tab-${tabId}`).classList.add('active');
+    }
+
+    function togglePause() {
+        isPaused = !isPaused;
+        document.getElementById('btn-pause').innerText = isPaused ? "▶️ Resume" : "⏸️ Pause";
+    }
+
+    function updateSimData() {
+        simSpeed = parseFloat(document.getElementById('slider-speed').value);
+        hungerMultiplier = parseFloat(document.getElementById('slider-hunger').value);
+        virusContagionRate = parseFloat(document.getElementById('slider-virusrate').value);
+
+        document.getElementById('val-speed').innerText = `${simSpeed.toFixed(1)}x`;
+        document.getElementById('val-hunger').innerText = `${hungerMultiplier.toFixed(1)}x`;
+        document.getElementById('val-virusrate').innerText = `${Math.round(virusContagionRate * 100)}%`;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    updateSimData();
+    initEdenScenario();
+    drawSimulation();
+</script>
+</body>
+</html>

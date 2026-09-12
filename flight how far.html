@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ground Spotter View - DLH39E</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #1a4a75;
+            font-family: monospace;
+            color: #ffffff;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        #hud {
+            position: absolute;
+            bottom: 25px;
+            left: 25px;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 18px;
+            border-radius: 8px;
+            border: 1px solid #4a90e2;
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            max-width: 280px;
+            z-index: 10;
+        }
+        .control-group {
+            margin-top: 12px;
+        }
+        label {
+            display: block;
+            font-size: 11px;
+            margin-bottom: 5px;
+            color: #8ab4f8;
+            letter-spacing: 0.5px;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #4a90e2;
+        }
+        .btn {
+            width: 100%;
+            background: #234f1e;
+            color: #fff;
+            border: 1px solid #4a90e2;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 11px;
+            font-weight: bold;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+        .btn:hover {
+            background: #2e6f40;
+        }
+        .btn-lock {
+            background: #1e3d59;
+        }
+        .btn-lock.active {
+            background: #b91c1c;
+            border-color: #f87171;
+        }
+        #instructions {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none;
+            z-index: 10;
+        }
+        #spotter-tag {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: rgba(241, 196, 15, 0.85);
+            color: #000;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: bold;
+            border-radius: 4px;
+            pointer-events: none;
+            display: none;
+            white-space: nowrap;
+            box-shadow: 0 0 10px rgba(241, 196, 15, 0.6);
+            z-index: 5;
+        }
+        #spotter-tag::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px 5px 0;
+            border-style: solid;
+            border-color: rgba(241, 196, 15, 0.85) transparent;
+            display: block;
+            width: 0;
+        }
+    </style>
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="instructions">Click & drag to look around freely from the ground | Toggle Lock-On to track plane</div>
+<div id="spotter-tag">DLH39E (62,000 ft)</div>
+<div id="canvas-container"></div>
+
+<div id="hud">
+    <div style="font-size: 14px; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 6px;">
+        Callsign: <strong>DLH39E</strong><br>
+        Aircraft: <strong>A321-271NX</strong>
+    </div>
+    <div>Status: <span id="alt-display" style="color: #f1c40f; font-weight: bold;">Cruising at 62,000 ft</span></div>
+    
+    <div class="control-group">
+        <label for="zoomSlider">BINOCULAR OPTICAL ZOOM</label>
+        <input type="range" id="zoomSlider" min="0" max="100" value="10">
+    </div>
+
+    <button class="btn btn-lock" id="lockOnBtn">LOCK ON: OFF</button>
+    <button class="btn" id="toggleMarkerBtn">TOGGLE MARKER</button>
+</div>
+
+<script>
+    let scene, camera, renderer, airplane;
+    let tagElement;
+    let markerVisible = true;
+    let isLockedOn = false;
+    let contrailSegments = [];
+    let spawnTimer = 0;
+
+    // Ground camera setup (1.7 meters high eye-level)
+    const cameraPos = new THREE.Vector3(0, 1.7, 0);
+    let pitch = 0.4; // Looking up towards stratosphere
+    let yaw = 0;
+
+    let isMouseDown = false;
+    let mouseX = 0, mouseY = 0;
+
+    // 62,000 feet converted to Three.js units (approx 18,900 meters altitude)
+    const CRUISE_ALTITUDE = 18900;
+
+    function init() {
+        tagElement = document.getElementById('spotter-tag');
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x113355);
+
+        camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100000);
+        camera.position.copy(cameraPos);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const dom = renderer.domElement;
+        dom.addEventListener('mousedown', (e) => {
+            if (isLockedOn) return;
+            isMouseDown = true;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        window.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isMouseDown || isLockedOn) return;
+            const deltaX = e.clientX - mouseX;
+            const deltaY = e.clientY - mouseY;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+
+            yaw -= deltaX * 0.003;
+            pitch -= deltaY * 0.003;
+            pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
+        });
+
+        dom.addEventListener('touchstart', (e) => {
+            if (isLockedOn || e.touches.length === 0) return;
+            isMouseDown = true;
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        });
+
+        window.addEventListener('touchend', () => {
+            isMouseDown = false;
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (!isMouseDown || isLockedOn || e.touches.length === 0) return;
+            const deltaX = e.touches[0].clientX - mouseX;
+            const deltaY = e.touches[0].clientY - mouseY;
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+
+            yaw -= deltaX * 0.003;
+            pitch -= deltaY * 0.003;
+            pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
+        }, { passive: true });
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfffaed, 1.5);
+        sunLight.position.set(1000, 5000, 1000);
+        scene.add(sunLight);
+
+        createEnvironment();
+        createA321();
+
+        const slider = document.getElementById('zoomSlider');
+        slider.addEventListener('input', (e) => {
+            updateZoom(parseFloat(e.target.value));
+        });
+
+        const toggleBtn = document.getElementById('toggleMarkerBtn');
+        toggleBtn.addEventListener('click', () => {
+            markerVisible = !markerVisible;
+            toggleBtn.style.background = markerVisible ? '#234f1e' : '#555';
+            toggleBtn.textContent = markerVisible ? 'TOGGLE MARKER' : 'MARKER OFF';
+            if (!markerVisible) {
+                tagElement.style.display = 'none';
+            }
+        });
+
+        const lockBtn = document.getElementById('lockOnBtn');
+        lockBtn.addEventListener('click', () => {
+            isLockedOn = !isLockedOn;
+            if (isLockedOn) {
+                lockBtn.classList.add('active');
+                lockBtn.textContent = 'LOCK ON: ACTIVE';
+            } else {
+                lockBtn.classList.remove('active');
+                lockBtn.textContent = 'LOCK ON: OFF';
+            }
+        });
+
+        window.addEventListener('resize', onWindowResize, false);
+        animate();
+    }
+
+    function createA321() {
+        airplane = new THREE.Group();
+        airplane.position.set(-20000, CRUISE_ALTITUDE, -6000); 
+        airplane.rotation.y = Math.PI / 2;
+
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.1 });
+        const wingMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.3 });
+        const accentMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.3 });
+
+        const fuselageGeo = new THREE.CylinderGeometry(8, 8, 140, 16);
+        fuselageGeo.rotateX(Math.PI / 2);
+        const fuselage = new THREE.Mesh(fuselageGeo, bodyMat);
+        airplane.add(fuselage);
+
+        const noseGeo = new THREE.ConeGeometry(8, 30, 16);
+        noseGeo.rotateX(Math.PI / 2);
+        const nose = new THREE.Mesh(noseGeo, bodyMat);
+        nose.position.z = 85;
+        airplane.add(nose);
+
+        const wingGeo = new THREE.BoxGeometry(160, 1, 24);
+        const wings = new THREE.Mesh(wingGeo, wingMat);
+        wings.position.set(0, 0, -5);
+        airplane.add(wings);
+
+        const tailGeo = new THREE.BoxGeometry(2, 28, 16);
+        const tail = new THREE.Mesh(tailGeo, accentMat);
+        tail.position.set(0, 14, -65);
+        tail.rotation.x = -0.3;
+        airplane.add(tail);
+
+        const hTailGeo = new THREE.BoxGeometry(45, 0.8, 10);
+        const hTail = new THREE.Mesh(hTailGeo, wingMat);
+        hTail.position.set(0, 2, -65);
+        airplane.add(hTail);
+
+        scene.add(airplane);
+    }
+
+    function createEnvironment() {
+        // Ground Plane
+        const groundGeo = new THREE.PlaneGeometry(200000, 200000);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x2e6f40, roughness: 0.9, metalness: 0.1 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -50;
+        scene.add(ground);
+
+        // Houses / Buildings
+        const houseColors = [0xb85d33, 0x8c7853, 0x5c6b73, 0x99582a, 0x343a40, 0xd4a373];
+        for (let i = 0; i < 400; i++) {
+            const w = Math.random() * 30 + 15;
+            const h = Math.random() * 60 + 15;
+            const d = Math.random() * 30 + 15;
+            const houseGeo = new THREE.BoxGeometry(w, h, d);
+            const houseMat = new THREE.MeshStandardMaterial({ 
+                color: houseColors[Math.floor(Math.random() * houseColors.length)], 
+                roughness: 0.8 
+            });
+            const house = new THREE.Mesh(houseGeo, houseMat);
+
+            let x = (Math.random() - 0.5) * 3000;
+            let z = (Math.random() - 0.5) * 3000;
+            if (Math.abs(x) < 80 && Math.abs(z) < 80) {
+                x += 150;
+            }
+
+            house.position.set(x, h / 2 - 50, z);
+            scene.add(house);
+        }
+
+        // Trees
+        const treeLeafMats = [
+            new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 0.8 }),
+            new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.8 }),
+            new THREE.MeshStandardMaterial({ color: 0x40916c, roughness: 0.8 })
+        ];
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x582f0e, roughness: 0.9 });
+        const trunkGeo = new THREE.CylinderGeometry(1.5, 2, 8, 6);
+        const leavesGeo = new THREE.ConeGeometry(8, 18, 6);
+
+        for (let i = 0; i < 800; i++) {
+            const treeGroup = new THREE.Group();
+            
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 4;
+            treeGroup.add(trunk);
+
+            const leaves = new THREE.Mesh(leavesGeo, treeLeafMats[Math.floor(Math.random() * treeLeafMats.length)]);
+            leaves.position.y = 14;
+            treeGroup.add(leaves);
+
+            let x = (Math.random() - 0.5) * 4000;
+            let z = (Math.random() - 0.5) * 4000;
+            if (Math.abs(x) < 60 && Math.abs(z) < 60) {
+                x += 120;
+            }
+
+            treeGroup.position.set(x, -50, z);
+            scene.add(treeGroup);
+        }
+
+        // High Altitude Clouds (positioned below 62k ft)
+        const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 });
+        const cloudGeo = new THREE.BoxGeometry(1000, 100, 500);
+
+        for (let i = 0; i < 50; i++) {
+            const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+            cloud.position.set(
+                (Math.random() - 0.5) * 30000,
+                Math.random() * 3000 + 6000,
+                (Math.random() - 0.5) * 30000
+            );
+            scene.add(cloud);
+        }
+    }
+
+    function spawnContrailSegment() {
+        const leftLocal = new THREE.Vector3(-25, 0, -65);
+        const rightLocal = new THREE.Vector3(25, 0, -65);
+        
+        leftLocal.applyMatrix4(airplane.matrixWorld);
+        rightLocal.applyMatrix4(airplane.matrixWorld);
+
+        const segmentGeo = new THREE.CylinderGeometry(8, 60, 200, 8);
+        segmentGeo.rotateX(Math.PI / 2);
+
+        const segmentMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 });
+
+        const leftMesh = new THREE.Mesh(segmentGeo, segmentMat);
+        leftMesh.position.copy(leftLocal);
+        leftMesh.rotation.copy(airplane.rotation);
+        
+        const rightMesh = new THREE.Mesh(segmentGeo, segmentMat);
+        rightMesh.position.copy(rightLocal);
+        rightMesh.rotation.copy(airplane.rotation);
+
+        scene.add(leftMesh);
+        scene.add(rightMesh);
+
+        contrailSegments.push({ mesh: leftMesh, opacity: 0.45 });
+        contrailSegments.push({ mesh: rightMesh, opacity: 0.45 });
+    }
+
+    function updateZoom(val) {
+        const targetFOV = THREE.MathUtils.lerp(50, 2.5, val / 100);
+        camera.fov = targetFOV;
+        camera.updateProjectionMatrix();
+    }
+
+    function updateSpotterTag() {
+        if (!markerVisible) return;
+
+        const vector = airplane.position.clone();
+        vector.project(camera);
+
+        if (vector.z > 1 || vector.x < -1.2 || vector.x > 1.2 || vector.y < -1.2 || vector.y > 1.2) {
+            tagElement.style.display = 'none';
+            return;
+        }
+
+        const x = (vector.x * .5 + .5) * window.innerWidth;
+        const y = (vector.y * -.5 + .5) * window.innerHeight;
+
+        tagElement.style.display = 'block';
+        tagElement.style.left = `${x}px`;
+        tagElement.style.top = `${y}px`;
+    }
+
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (airplane) {
+            airplane.position.x += 2.5;
+            
+            if (airplane.position.x > 20000) {
+                airplane.position.x = -20000;
+            }
+
+            airplane.rotation.z = Math.sin(Date.now() * 0.0004) * 0.02;
+            airplane.updateMatrixWorld(true);
+
+            spawnTimer++;
+            if (spawnTimer > 10) {
+                spawnContrailSegment();
+                spawnTimer = 0;
+            }
+
+            // Lock-on automatically targets the aircraft from ground level
+            if (isLockedOn) {
+                const dir = new THREE.Vector3().subVectors(airplane.position, cameraPos);
+                yaw = Math.atan2(dir.x, dir.z);
+                pitch = Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z));
+            }
+        }
+
+        // Extremely slow fade rate so contrails persist across the high stratosphere
+        for (let i = contrailSegments.length - 1; i >= 0; i--) {
+            let seg = contrailSegments[i];
+            seg.opacity -= 0.00007; 
+            seg.mesh.scale.addScalar(0.0008); 
+
+            if (seg.opacity <= 0) {
+                scene.remove(seg.mesh);
+                seg.mesh.geometry.dispose();
+                seg.mesh.material.dispose();
+                contrailSegments.splice(i, 1);
+            } else {
+                seg.mesh.material.opacity = seg.opacity;
+            }
+        }
+
+        camera.position.copy(cameraPos);
+        const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ');
+        camera.quaternion.setFromEuler(euler);
+
+        updateSpotterTag();
+        renderer.render(scene, camera);
+    }
+
+    window.onload = init;
+</script>
+
+</body>
+</html>

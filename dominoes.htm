@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spiral & Stairs Domino Run</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0d0d11;
+            font-family: Arial, sans-serif;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #ffffff;
+            background: rgba(15, 15, 25, 0.85);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(8px);
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 10;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            color: #4facfe;
+        }
+        p {
+            margin: 0;
+            font-size: 13px;
+            color: #bbbbbb;
+        }
+        .btn-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 5px;
+        }
+        button {
+            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 10px rgba(0, 242, 254, 0.3);
+        }
+        button:hover {
+            filter: brightness(1.15);
+            transform: translateY(-1px);
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        #reset-btn {
+            background: #444455;
+            box-shadow: none;
+        }
+        #reset-btn:hover {
+            background: #555566;
+        }
+        button:disabled {
+            background: #2a2a35;
+            cursor: not-allowed;
+            color: #666677;
+            box-shadow: none;
+            transform: none;
+        }
+        /* --- Minimap Container Overlay --- */
+        #minimap-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 180px;
+            height: 180px;
+            background: rgba(15, 15, 25, 0.85);
+            border-radius: 50%;
+            border: 2px solid rgba(0, 242, 254, 0.5);
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+            z-index: 10;
+        }
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>Spiral & Stairs Domino Run</h1>
+        <p>Butter-Smooth Reaction | Equal Spacing | Minimap Included</p>
+        <div class="btn-container">
+            <button id="push-btn">START REACTION</button>
+            <button id="reset-btn">RESET</button>
+        </div>
+    </div>
+
+    <div id="minimap-container">
+        <canvas id="minimap-canvas"></canvas>
+    </div>
+
+    <script>
+        // --- 1. Scene & Lighting Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a10);
+        scene.fog = new THREE.FogExp2(0x0a0a10, 0.12);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 100);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(3, 6, 3);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        // Floor Grid
+        const gridHelper = new THREE.GridHelper(10, 40, 0x00f2fe, 0x222233);
+        gridHelper.position.y = -0.001;
+        scene.add(gridHelper);
+
+        const floorGeo = new THREE.PlaneGeometry(12, 12);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x101018, roughness: 0.8 });
+        const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+        floorMesh.rotation.x = -Math.PI / 2;
+        floorMesh.receiveShadow = true;
+        scene.add(floorMesh);
+
+        // --- 2. Track & Stairs Setup with Equal Arc Spacing ---
+        const dominoWidth = 0.03;
+        const dominoHeight = 0.07;
+        const dominoDepth = 0.012;
+        const targetSpacing = 0.032; // Exact physical gap for continuous transfer
+
+        // Dense sampling to parameterize curve by distance
+        const rawPoints = [];
+        const sampleCount = 4000;
+        for (let i = 0; i <= sampleCount; i++) {
+            const progress = i / sampleCount;
+            const angle = progress * Math.PI * 3.5;
+            const radius = 0.3 + progress * 0.85;
+
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            rawPoints.push(new THREE.Vector3(x, 0, z));
+        }
+
+        // Resample curve at equal distances
+        const pathPoints = [rawPoints[0].clone()];
+        let accumulatedDist = 0;
+
+        for (let i = 1; i < rawPoints.length; i++) {
+            const dist = rawPoints[i].distanceTo(rawPoints[i - 1]);
+            accumulatedDist += dist;
+            if (accumulatedDist >= targetSpacing) {
+                pathPoints.push(rawPoints[i].clone());
+                accumulatedDist = 0;
+            }
+        }
+
+        const dominoCount = pathPoints.length;
+
+        // Apply stair elevation smoothly
+        for (let i = 0; i < dominoCount; i++) {
+            let elevation = 0;
+            if (i > 35 && i <= 65) {
+                elevation = (i - 35) * 0.005;
+            } else if (i > 65 && i <= 95) {
+                elevation = (30 * 0.005) - (i - 65) * 0.005;
+            }
+            pathPoints[i].y = Math.max(0, elevation);
+        }
+
+        // Stairs Visual Blocks
+        const stepMat = new THREE.MeshStandardMaterial({ color: 0x252535, roughness: 0.5 });
+        for (let i = 35; i <= 95; i++) {
+            const p = pathPoints[i];
+            if (p.y > 0.001) {
+                const stepGeo = new THREE.BoxGeometry(0.12, p.y, 0.08);
+                const stepMesh = new THREE.Mesh(stepGeo, stepMat);
+                stepMesh.position.set(p.x, p.y / 2, p.z);
+                stepMesh.castShadow = true;
+                stepMesh.receiveShadow = true;
+                scene.add(stepMesh);
+            }
+        }
+
+        // --- 3. Domino Generation ---
+        const dominoes = [];
+        const baseDominoGeo = new THREE.BoxGeometry(dominoWidth, dominoHeight, dominoDepth);
+        baseDominoGeo.translate(0, dominoHeight / 2, 0); // Bottom Pivot Point
+
+        for (let i = 0; i < dominoCount; i++) {
+            const curr = pathPoints[i];
+            const next = i < dominoCount - 1 ? pathPoints[i + 1] : pathPoints[i].clone().add(pathPoints[i].clone().sub(pathPoints[i - 1]));
+
+            const dx = next.x - curr.x;
+            const dz = next.z - curr.z;
+            const yaw = Math.atan2(dx, dz);
+
+            const color = new THREE.Color().setHSL(i / dominoCount, 0.85, 0.55);
+            const mat = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: 0.2,
+                metalness: 0.2
+            });
+
+            const mesh = new THREE.Mesh(baseDominoGeo, mat);
+            mesh.position.copy(curr);
+            mesh.rotation.order = "YXZ";
+            mesh.rotation.y = yaw;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            dominoes.push({
+                mesh: mesh,
+                initialPos: curr.clone(),
+                initialYaw: yaw,
+                angle: 0,
+                angularVelocity: 0,
+                isFalling: false
+            });
+        }
+
+        // --- 4. Fireworks Confetti ---
+        const confettiCount = 300;
+        const confettiGeo = new THREE.BufferGeometry();
+        const confettiPos = new Float32Array(confettiCount * 3);
+        const confettiVel = [];
+        const confettiColors = new Float32Array(confettiCount * 3);
+
+        for (let i = 0; i < confettiCount; i++) {
+            confettiPos[i * 3] = 0;
+            confettiPos[i * 3 + 1] = -10;
+            confettiPos[i * 3 + 2] = 0;
+
+            const c = new THREE.Color().setHSL(Math.random(), 1, 0.6);
+            confettiColors[i * 3] = c.r;
+            confettiColors[i * 3 + 1] = c.g;
+            confettiColors[i * 3 + 2] = c.b;
+
+            confettiVel.push(new THREE.Vector3(
+                (Math.random() - 0.5) * 3,
+                Math.random() * 4 + 2,
+                (Math.random() - 0.5) * 3
+            ));
+        }
+
+        confettiGeo.setAttribute('position', new THREE.BufferAttribute(confettiPos, 3));
+        confettiGeo.setAttribute('color', new THREE.BufferAttribute(confettiColors, 3));
+
+        const confettiMat = new THREE.PointsMaterial({
+            size: 0.03,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.9
+        });
+
+        const confettiSystem = new THREE.Points(confettiGeo, confettiMat);
+        scene.add(confettiSystem);
+
+        let confettiActive = false;
+
+        function triggerConfetti(origin) {
+            confettiActive = true;
+            const positions = confettiSystem.geometry.attributes.position.array;
+            for (let i = 0; i < confettiCount; i++) {
+                positions[i * 3] = origin.x;
+                positions[i * 3 + 1] = origin.y + 0.1;
+                positions[i * 3 + 2] = origin.z;
+            }
+            confettiSystem.geometry.attributes.position.needsUpdate = true;
+        }
+
+        function updateConfetti(dt) {
+            if (!confettiActive) return;
+            const positions = confettiSystem.geometry.attributes.position.array;
+            for (let i = 0; i < confettiCount; i++) {
+                positions[i * 3] += confettiVel[i].x * dt;
+                positions[i * 3 + 1] += confettiVel[i].y * dt;
+                positions[i * 3 + 2] += confettiVel[i].z * dt;
+
+                confettiVel[i].y -= 9.8 * dt * 0.5;
+            }
+            confettiSystem.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // --- 5. Unstoppable Physics Simulation ---
+        let isSimulationActive = false;
+        let leadIndex = 0;
+        const maxAngle = Math.PI / 2.25;      // Floor stop angle (~80°)
+        const contactAngleThreshold = 0.24; // Contact tilt angle (~13.7°)
+
+        function updatePhysics(dt) {
+            if (!isSimulationActive) return;
+
+            const gravity = 22.0;
+
+            for (let i = 0; i < dominoes.length; i++) {
+                const d = dominoes[i];
+
+                if (d.isFalling) {
+                    const angularAccel = gravity * Math.sin(Math.max(d.angle, 0.12));
+                    d.angularVelocity += angularAccel * dt;
+                    d.angle += d.angularVelocity * dt;
+
+                    if (i < dominoes.length - 1) {
+                        const nextD = dominoes[i + 1];
+                        if (!nextD.isFalling && d.angle >= contactAngleThreshold) {
+                            nextD.isFalling = true;
+                            nextD.angularVelocity = Math.max(d.angularVelocity * 0.6, 1.8);
+                            leadIndex = i + 1;
+                        }
+                    }
+
+                    if (i === dominoes.length - 1 && d.angle >= maxAngle * 0.8 && !confettiActive) {
+                        triggerConfetti(d.mesh.position);
+                    }
+
+                    if (d.angle >= maxAngle) {
+                        d.angle = maxAngle;
+                        d.angularVelocity = 0;
+                    }
+
+                    d.mesh.rotation.y = d.initialYaw;
+                    d.mesh.rotation.x = d.angle;
+                }
+            }
+        }
+
+        // --- 6. Minimap 2D Render Engine ---
+        const minimapCanvas = document.getElementById("minimap-canvas");
+        const ctx = minimapCanvas.getContext("2d");
+
+        function resizeMinimap() {
+            minimapCanvas.width = 180 * window.devicePixelRatio;
+            minimapCanvas.height = 180 * window.devicePixelRatio;
+        }
+        resizeMinimap();
+
+        function drawMinimap() {
+            const w = minimapCanvas.width;
+            const h = minimapCanvas.height;
+            const centerX = w / 2;
+            const centerY = h / 2;
+            const scale = w / 3.2; // Scale world units (X/Z) to radar pixel space
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Draw Spiral Path
+            ctx.lineWidth = 3 * window.devicePixelRatio;
+            ctx.strokeStyle = "rgba(79, 172, 254, 0.35)";
+            ctx.beginPath();
+
+            for (let i = 0; i < pathPoints.length; i++) {
+                const p = pathPoints[i];
+                const px = centerX + p.x * scale;
+                const py = centerY + p.z * scale;
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+
+            // Draw Dominoes Status
+            const dotSize = 2.0 * window.devicePixelRatio;
+            for (let i = 0; i < dominoes.length; i++) {
+                const d = dominoes[i];
+                const px = centerX + d.initialPos.x * scale;
+                const py = centerY + d.initialPos.z * scale;
+
+                ctx.fillStyle = d.isFalling ? (d.angle >= maxAngle ? "#555577" : "#00f2fe") : "#ffffff";
+                ctx.beginPath();
+                ctx.arc(px, py, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw Active Lead Indicator
+            const leadDomino = dominoes[leadIndex];
+            const lx = centerX + leadDomino.initialPos.x * scale;
+            const ly = centerY + leadDomino.initialPos.z * scale;
+
+            ctx.fillStyle = "#ff0055";
+            ctx.shadowColor = "#ff0055";
+            ctx.shadowBlur = 8 * window.devicePixelRatio;
+            ctx.beginPath();
+            ctx.arc(lx, ly, 4.5 * window.devicePixelRatio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0; // Reset blur
+        }
+
+        // --- 7. Camera & Controls ---
+        const pushBtn = document.getElementById("push-btn");
+        const resetBtn = document.getElementById("reset-btn");
+
+        const smoothCamFocus = pathPoints[0].clone();
+
+        function setInitialCamera() {
+            smoothCamFocus.copy(pathPoints[0]);
+            camera.position.set(0.2, 0.45, -0.4);
+            camera.lookAt(smoothCamFocus.x, smoothCamFocus.y + 0.05, smoothCamFocus.z);
+        }
+        setInitialCamera();
+
+        function pushDomino() {
+            if (isSimulationActive) return;
+            isSimulationActive = true;
+
+            dominoes[0].isFalling = true;
+            dominoes[0].angularVelocity = 2.2;
+
+            pushBtn.disabled = true;
+            pushBtn.innerText = "RUNNING...";
+        }
+
+        function resetSimulation() {
+            isSimulationActive = false;
+            confettiActive = false;
+            leadIndex = 0;
+
+            for (let i = 0; i < dominoes.length; i++) {
+                const d = dominoes[i];
+                d.angle = 0;
+                d.angularVelocity = 0;
+                d.isFalling = false;
+                d.mesh.position.copy(d.initialPos);
+                d.mesh.rotation.set(0, d.initialYaw, 0, "YXZ");
+            }
+
+            const positions = confettiSystem.geometry.attributes.position.array;
+            for (let i = 0; i < confettiCount * 3; i++) positions[i] = -10;
+            confettiSystem.geometry.attributes.position.needsUpdate = true;
+
+            setInitialCamera();
+
+            pushBtn.disabled = false;
+            pushBtn.innerText = "START REACTION";
+        }
+
+        pushBtn.addEventListener("click", pushDomino);
+        resetBtn.addEventListener("click", resetSimulation);
+
+        // --- 8. Main Animation Loop ---
+        let lastTime = performance.now();
+
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min((currentTime - lastTime) / 1000, 0.02);
+            lastTime = currentTime;
+
+            updatePhysics(dt);
+            updateConfetti(dt);
+
+            if (isSimulationActive) {
+                const leadDomino = dominoes[leadIndex];
+                const targetLeadPos = leadDomino.mesh.position;
+
+                const lerpFactor = 1 - Math.exp(-6 * dt);
+                smoothCamFocus.lerp(targetLeadPos, lerpFactor);
+
+                const camOffset = new THREE.Vector3(-0.4, 0.35, -0.4);
+                const targetCamPos = smoothCamFocus.clone().add(camOffset);
+
+                camera.position.lerp(targetCamPos, lerpFactor);
+                camera.lookAt(smoothCamFocus.x, smoothCamFocus.y + 0.03, smoothCamFocus.z);
+
+                dirLight.position.set(smoothCamFocus.x + 2, smoothCamFocus.y + 4, smoothCamFocus.z + 2);
+            }
+
+            renderer.render(scene, camera);
+            drawMinimap();
+        }
+
+        animate(performance.now());
+
+        // --- 9. Window Resizing ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            resizeMinimap();
+        });
+    </script>
+</body>
+</html>

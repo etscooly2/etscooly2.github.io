@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Maps Street View - Spotter</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: Roboto, Arial, sans-serif;
+            color: #ffffff;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        /* Google Maps Style UI Elements */
+        #maps-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        /* Top-left search bar style */
+        .maps-search {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: #ffffff;
+            color: #202124;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        /* Bottom-right compass / controls */
+        .maps-controls {
+            position: absolute;
+            bottom: 40px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+        }
+        .maps-btn {
+            background: #ffffff;
+            color: #3c4043;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .maps-btn:hover {
+            background: #f8f9fa;
+        }
+        .maps-btn.active {
+            background: #1a73e8;
+            color: #fff;
+        }
+        /* Bottom overlay card like Street View */
+        .maps-card {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(32, 33, 36, 0.9);
+            padding: 14px 18px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            pointer-events: auto;
+            backdrop-filter: blur(4px);
+            font-size: 13px;
+            border: 1px solid rgba(255,255,255,0.1);
+            max-width: 260px;
+        }
+        .maps-card strong {
+            color: #8ab4f8;
+            font-size: 14px;
+        }
+        #spotter-tag {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: rgba(255, 255, 255, 0.95);
+            color: #202124;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            border-radius: 4px;
+            pointer-events: none;
+            display: none;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 5;
+            border: 1px solid #dadce0;
+        }
+        #spotter-tag::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px 5px 0;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.95) transparent;
+            display: block;
+            width: 0;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin-top: 8px;
+            cursor: pointer;
+            accent-color: #1a73e8;
+        }
+    </style>
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="spotter-tag">DLH39E • 62,000 ft</div>
+<div id="canvas-container"></div>
+
+<div id="maps-ui">
+    <div class="maps-search">
+        📍 <span>Standing on Street View White Circle Pad</span>
+    </div>
+
+    <div class="maps-card">
+        <div>Flight: <strong>DLH39E</strong> (A321-271NX)</div>
+        <div style="margin-top: 4px; color: #f1c40f;">Altitude: 62,000 ft</div>
+        <div style="margin-top: 10px;">
+            <label style="font-size: 11px; color: #9aa0a6;">BINOCULAR ZOOM</label>
+            <input type="range" id="zoomSlider" min="0" max="100" value="10">
+        </div>
+    </div>
+
+    <div class="maps-controls">
+        <button class="maps-btn" id="lockOnBtn" title="Lock-on Track">🎯</button>
+        <button class="maps-btn" id="toggleMarkerBtn" title="Toggle Marker">📍</button>
+    </div>
+</div>
+
+<script>
+    let scene, camera, renderer, airplane;
+    let tagElement;
+    let markerVisible = true;
+    let isLockedOn = false;
+    let contrailSegments = [];
+    let spawnTimer = 0;
+
+    // Camera standing right inside the big white circle pad on the road
+    const cameraPos = new THREE.Vector3(0, 1.7, 0);
+    let pitch = 0.4; 
+    let yaw = 0;
+
+    let isMouseDown = false;
+    let mouseX = 0, mouseY = 0;
+
+    const CRUISE_ALTITUDE = 18900; // 62,000 ft
+
+    function init() {
+        tagElement = document.getElementById('spotter-tag');
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x336699); // Google Maps Street View sky blue tint
+
+        camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100000);
+        camera.position.copy(cameraPos);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const dom = renderer.domElement;
+        dom.addEventListener('mousedown', (e) => {
+            if (isLockedOn) return;
+            isMouseDown = true;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        window.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isMouseDown || isLockedOn) return;
+            const deltaX = e.clientX - mouseX;
+            const deltaY = e.clientY - mouseY;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+
+            yaw -= deltaX * 0.003;
+            pitch -= deltaY * 0.003;
+            pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
+        });
+
+        dom.addEventListener('touchstart', (e) => {
+            if (isLockedOn || e.touches.length === 0) return;
+            isMouseDown = true;
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        });
+
+        window.addEventListener('touchend', () => {
+            isMouseDown = false;
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (!isMouseDown || isLockedOn || e.touches.length === 0) return;
+            const deltaX = e.touches[0].clientX - mouseX;
+            const deltaY = e.touches[0].clientY - mouseY;
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+
+            yaw -= deltaX * 0.003;
+            pitch -= deltaY * 0.003;
+            pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
+        }, { passive: true });
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfffaed, 1.5);
+        sunLight.position.set(1000, 5000, 1000);
+        scene.add(sunLight);
+
+        createEnvironment();
+        createA321();
+
+        const slider = document.getElementById('zoomSlider');
+        slider.addEventListener('input', (e) => {
+            updateZoom(parseFloat(e.target.value));
+        });
+
+        const toggleBtn = document.getElementById('toggleMarkerBtn');
+        toggleBtn.addEventListener('click', () => {
+            markerVisible = !markerVisible;
+            toggleBtn.classList.toggle('active', markerVisible);
+            if (!markerVisible) {
+                tagElement.style.display = 'none';
+            }
+        });
+        toggleBtn.classList.add('active');
+
+        const lockBtn = document.getElementById('lockOnBtn');
+        lockBtn.addEventListener('click', () => {
+            isLockedOn = !isLockedOn;
+            lockBtn.classList.toggle('active', isLockedOn);
+        });
+
+        window.addEventListener('resize', onWindowResize, false);
+        animate();
+    }
+
+    function createA321() {
+        airplane = new THREE.Group();
+        airplane.position.set(-20000, CRUISE_ALTITUDE, -6000); 
+        airplane.rotation.y = Math.PI / 2;
+
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.1 });
+        const wingMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.3 });
+        const accentMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.3 });
+
+        const fuselageGeo = new THREE.CylinderGeometry(8, 8, 140, 16);
+        fuselageGeo.rotateX(Math.PI / 2);
+        const fuselage = new THREE.Mesh(fuselageGeo, bodyMat);
+        airplane.add(fuselage);
+
+        const noseGeo = new THREE.ConeGeometry(8, 30, 16);
+        noseGeo.rotateX(Math.PI / 2);
+        const nose = new THREE.Mesh(noseGeo, bodyMat);
+        nose.position.z = 85;
+        airplane.add(nose);
+
+        const wingGeo = new THREE.BoxGeometry(160, 1, 24);
+        const wings = new THREE.Mesh(wingGeo, wingMat);
+        wings.position.set(0, 0, -5);
+        airplane.add(wings);
+
+        const tailGeo = new THREE.BoxGeometry(2, 28, 16);
+        const tail = new THREE.Mesh(tailGeo, accentMat);
+        tail.position.set(0, 14, -65);
+        tail.rotation.x = -0.3;
+        airplane.add(tail);
+
+        const hTailGeo = new THREE.BoxGeometry(45, 0.8, 10);
+        const hTail = new THREE.Mesh(hTailGeo, wingMat);
+        hTail.position.set(0, 2, -65);
+        airplane.add(hTail);
+
+        scene.add(airplane);
+    }
+
+    function createEnvironment() {
+        // Ground Road Plane
+        const groundGeo = new THREE.PlaneGeometry(200000, 200000);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x3a3b3c, roughness: 0.9 }); // Asphalt road tone
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -50;
+        scene.add(ground);
+
+        // Big White Circle Pad on the road right where you stand
+        const padGeo = new THREE.RingGeometry(0, 24, 32);
+        const padMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        const whitePad = new THREE.Mesh(padGeo, padMat);
+        whitePad.rotation.x = -Math.PI / 2;
+        whitePad.position.y = -49.7; 
+        scene.add(whitePad);
+
+        // Nearby buildings / surroundings
+        for (let i = 0; i < 300; i++) {
+            const w = Math.random() * 30 + 15;
+            const h = Math.random() * 50 + 10;
+            const d = Math.random() * 30 + 15;
+            const houseGeo = new THREE.BoxGeometry(w, h, d);
+            const houseMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+            const house = new THREE.Mesh(houseGeo, houseMat);
+
+            let x = (Math.random() - 0.5) * 2500;
+            let z = (Math.random() - 0.5) * 2500;
+            if (Math.abs(x) < 100 && Math.abs(z) < 100) x += 150;
+
+            house.position.set(x, h / 2 - 50, z);
+            scene.add(house);
+        }
+    }
+
+    function spawnContrailSegment() {
+        const leftLocal = new THREE.Vector3(-25, 0, -65);
+        const rightLocal = new THREE.Vector3(25, 0, -65);
+        
+        leftLocal.applyMatrix4(airplane.matrixWorld);
+        rightLocal.applyMatrix4(airplane.matrixWorld);
+
+        const segmentGeo = new THREE.CylinderGeometry(8, 60, 200, 8);
+        segmentGeo.rotateX(Math.PI / 2);
+        const segmentMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 });
+
+        const leftMesh = new THREE.Mesh(segmentGeo, segmentMat);
+        leftMesh.position.copy(leftLocal);
+        leftMesh.rotation.copy(airplane.rotation);
+        
+        const rightMesh = new THREE.Mesh(segmentGeo, segmentMat);
+        rightMesh.position.copy(rightLocal);
+        rightMesh.rotation.copy(airplane.rotation);
+
+        scene.add(leftMesh);
+        scene.add(rightMesh);
+
+        contrailSegments.push({ mesh: leftMesh, opacity: 0.45 });
+        contrailSegments.push({ mesh: rightMesh, opacity: 0.45 });
+    }
+
+    function updateZoom(val) {
+        const targetFOV = THREE.MathUtils.lerp(50, 2.5, val / 100);
+        camera.fov = targetFOV;
+        camera.updateProjectionMatrix();
+    }
+
+    function updateSpotterTag() {
+        if (!markerVisible) return;
+
+        const vector = airplane.position.clone();
+        vector.project(camera);
+
+        if (vector.z > 1 || vector.x < -1.2 || vector.x > 1.2 || vector.y < -1.2 || vector.y > 1.2) {
+            tagElement.style.display = 'none';
+            return;
+        }
+
+        const x = (vector.x * .5 + .5) * window.innerWidth;
+        const y = (vector.y * -.5 + .5) * window.innerHeight;
+
+        tagElement.style.display = 'block';
+        tagElement.style.left = `${x}px`;
+        tagElement.style.top = `${y}px`;
+    }
+
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (airplane) {
+            airplane.position.x += 2.5;
+            if (airplane.position.x > 20000) {
+                airplane.position.x = -20000;
+            }
+
+            airplane.rotation.z = Math.sin(Date.now() * 0.0004) * 0.02;
+            airplane.updateMatrixWorld(true);
+
+            spawnTimer++;
+            if (spawnTimer > 10) {
+                spawnContrailSegment();
+                spawnTimer = 0;
+            }
+
+            if (isLockedOn) {
+                const dir = new THREE.Vector3().subVectors(airplane.position, cameraPos);
+                yaw = Math.atan2(dir.x, dir.z);
+                pitch = Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z));
+            }
+        }
+
+        for (let i = contrailSegments.length - 1; i >= 0; i--) {
+            let seg = contrailSegments[i];
+            seg.opacity -= 0.00007; 
+            seg.mesh.scale.addScalar(0.0008); 
+
+            if (seg.opacity <= 0) {
+                scene.remove(seg.mesh);
+                seg.mesh.geometry.dispose();
+                seg.mesh.material.dispose();
+                contrailSegments.splice(i, 1);
+            } else {
+                seg.mesh.material.opacity = seg.opacity;
+            }
+        }
+
+        camera.position.copy(cameraPos);
+        const euler = new THREE.Euler(pitch, yaw, 0, 'YXZ');
+        camera.quaternion.setFromEuler(euler);
+
+        updateSpotterTag();
+        renderer.render(scene, camera);
+    }
+
+    window.onload = init;
+</script>
+
+</body>
+</html>

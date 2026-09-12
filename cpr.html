@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realistic BLS / CPR Emergency Dispatch Simulator</title>
+    <style>
+        :root {
+            --bg-color: #050811;
+            --panel-bg: #0d1322;
+            --border-color: #1e293b;
+            --text-main: #f9fafb;
+            --text-muted: #94a3b8;
+            --accent-red: #ef4444;
+            --accent-green: #22c55e;
+            --accent-blue: #38bdf8;
+            --accent-orange: #f59e0b;
+            --accent-purple: #a855f7;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #dispatch-viewport {
+            position: relative;
+            width: 480px;
+            height: 800px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+            box-sizing: border-box;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.8);
+        }
+
+        /* Top Status Bar */
+        #status-bar {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #111827;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: bold;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            margin-bottom: 10px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .indicator-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #6b7280;
+        }
+        .indicator-dot.active { background-color: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+
+        /* Action Panel */
+        #action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .action-btn {
+            padding: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: filter 0.15s, transform 0.05s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .action-btn:active { transform: scale(0.97); }
+        .action-btn:disabled { background-color: #1f2937 !important; color: #4b5563; cursor: not-allowed; box-shadow: none; border: 1px solid #374151; }
+
+        #call-911-btn { background-color: var(--accent-red); }
+        #call-bystander-btn { background-color: var(--accent-orange); }
+        #get-aed-btn { background-color: var(--accent-purple); display: none; }
+        #takeover-btn { background-color: var(--accent-blue); display: none; }
+
+        /* Patient Scene Visual Mockup */
+        #scene-container {
+            position: relative;
+            width: 100%;
+            height: 150px;
+            background: #090d16;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        #patient-torso {
+            position: relative;
+            width: 80px;
+            height: 120px;
+            background: #c29b7f;
+            border-radius: 35px 35px 12px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.3);
+            transition: transform 0.06s ease;
+        }
+
+        #patient-torso::before {
+            content: '';
+            position: absolute;
+            top: -30px;
+            width: 38px;
+            height: 38px;
+            background: #c29b7f;
+            border-radius: 50%;
+        }
+
+        #sternum {
+            width: 44px;
+            height: 52px;
+            background: #a88065;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            color: #4a3022;
+            font-weight: bold;
+            border: 1.5px dashed #7a5842;
+            text-align: center;
+        }
+
+        #hands-overlay {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            background: #e0ac93;
+            border-radius: 50%;
+            border: 2px solid #8c5d46;
+            top: 48px;
+            transition: transform 0.06s ease;
+        }
+
+        .compressing-anim { transform: scale(0.93); }
+        .hands-down { transform: translateY(12px) scale(0.96); }
+
+        /* FULL HOSPITAL-GRADE MULTI-LEAD MONITOR CONSOLE */
+        #hospital-monitor {
+            width: 100%;
+            background: #000;
+            border: 2px solid #1e3a8a;
+            border-radius: 10px;
+            padding: 10px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+            box-shadow: inset 0 0 20px rgba(30, 58, 138, 0.4);
+        }
+
+        .monitor-header {
+            display: flex;
+            justify-content: space-between;
+            font-family: monospace;
+            font-size: 10px;
+            color: #60a5fa;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 3px;
+        }
+
+        .monitor-lead-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .lead-label {
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: bold;
+            color: #93c5fd;
+            width: 35px;
+        }
+
+        .ecg-canvas {
+            width: 270px;
+            height: 38px;
+            background: #000;
+            border-left: 1px solid #1e293b;
+        }
+
+        .monitor-readout-box {
+            text-align: right;
+            font-family: monospace;
+            width: 95px;
+            background: #030712;
+            padding: 3px 6px;
+            border-radius: 4px;
+            border: 1px solid #1f2937;
+        }
+        .vitals-label { font-size: 8px; color: var(--text-muted); letter-spacing: 0.5px; }
+        .vitals-value { font-size: 13px; font-weight: bold; color: #ef4444; }
+
+        /* Dispatch Terminal / Log */
+        #dispatch-log {
+            width: 100%;
+            background: #030712;
+            border: 1px solid var(--border-color);
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-family: monospace;
+            height: 55px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            color: #38bdf8;
+            box-sizing: border-box;
+            line-height: 1.3;
+        }
+
+        #compress-btn {
+            width: 100%;
+            padding: 13px;
+            font-size: 15px;
+            font-weight: 800;
+            background-color: var(--accent-green);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        #compress-btn:active {
+            background-color: #15803d;
+            transform: scale(0.98);
+        }
+
+        #retry-btn {
+            display: none;
+            width: 100%;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: bold;
+            background-color: var(--accent-orange);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(217, 119, 6, 0.4);
+            margin-bottom: 8px;
+        }
+
+        #metrics-bar {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-muted);
+            padding: 0 4px;
+            box-sizing: border-box;
+        }
+
+        #hint-btn {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            background: #374151;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 5;
+        }
+
+        #hint-popup {
+            position: absolute;
+            top: 48px;
+            right: 14px;
+            width: 240px;
+            background: #1f2937;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 10;
+        }
+        #hint-popup h4 { margin: 0 0 4px 0; color: #facc15; }
+    </style>
+</head>
+<body>
+
+    <div id="dispatch-viewport">
+        <button id="hint-btn" onclick="toggleHint()">i</button>
+        <div id="hint-popup">
+            <h4>AHA BLS Guidelines</h4>
+            <p>1. <strong>Continuous Compressions:</strong> Maintain rate of 100–120/min.<br>2. Call EMS or dispatch bystanders immediately.<br>3. Hit 30 to 100 compressions to achieve return of spontaneous circulation (ROSC).</p>
+        </div>
+
+        <div id="status-bar">
+            <div class="status-badge">
+                <div id="ems-indicator" class="indicator-dot"></div>
+                <span id="ems-text">EMS: Standby</span>
+            </div>
+            <div class="status-badge">
+                <div id="aed-indicator" class="indicator-dot"></div>
+                <span id="aed-text">AED: Unavailable</span>
+            </div>
+        </div>
+
+        <div id="action-grid">
+            <button id="call-911-btn" class="action-btn" onclick="dispatchEMS()">Call EMS (911/112)</button>
+            <button id="call-bystander-btn" class="action-btn" onclick="dispatchBystander()">Signal Bystander</button>
+            <button id="get-aed-btn" class="action-btn" onclick="applyAED()">Apply AED Pads</button>
+            <button id="takeover-btn" class="action-btn" onclick="takeOverCPR()">Take Over Compressions</button>
+        </div>
+
+        <div id="scene-container">
+            <div id="patient-torso">
+                <div id="sternum">CENTER<br>STERNAL</div>
+                <div id="hands-overlay"></div>
+            </div>
+        </div>
+
+        <div id="hospital-monitor">
+            <div class="monitor-header">
+                <span>PATIENT ECG / TELEMETRY CONSOLE</span>
+                <span id="monitor-mode-text" style="color: #ef4444;">MODE: CRITICAL</span>
+            </div>
+
+            <div class="monitor-lead-row">
+                <span class="lead-label">II</span>
+                <canvas id="ecg-canvas-ii" class="ecg-canvas" width="270" height="38"></canvas>
+                <div class="monitor-readout-box">
+                    <div class="vitals-label">HEART RHYTHM</div>
+                    <div id="vitals-status" class="vitals-value">ASYSTOLE</div>
+                </div>
+            </div>
+
+            <div class="monitor-lead-row" style="margin-bottom: 0;">
+                <span class="lead-label">V1</span>
+                <canvas id="ecg-canvas-v1" class="ecg-canvas" width="270" height="38"></canvas>
+                <div class="monitor-readout-box">
+                    <div class="vitals-label">SPO2 / PERF</div>
+                    <div id="spo2-status" class="vitals-value" style="color: #38bdf8;">0%</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dispatch-log">
+            [00:00] CAD Alert: Adult collapse reported. Scene safe. Check responsiveness...
+        </div>
+
+        <button id="compress-btn" onclick="performCompression()">PUSH (CHEST COMPRESSIONS)</button>
+        <button id="retry-btn" onclick="resetSimulation()">RESTART EMERGENCY SCENARIO</button>
+
+        <div id="metrics-bar">
+            <div>Compressions: <span id="comp-count">0</span></div>
+            <div>Pacing Rate: <span id="pacing-speed">0</span> cpm</div>
+            <div>Ambulance ETA: <span id="eta-display">--</span></div>
+        </div>
+    </div>
+
+    <script>
+        let compressionCount = 0;
+        let lastPressTimestamp = 0;
+        let simulationActive = true;
+        let monitoringInterval;
+        let ambulanceTimer;
+        let chaosTimer;
+        let etaRemaining = 0;
+        
+        const maxAllowableInterval = 900; 
+        const minAllowableInterval = 180; 
+
+        let bystanderActive = false;
+        let aedAvailable = false;
+        let aedApplied = false;
+
+        const canvasII = document.getElementById('ecg-canvas-ii');
+        const ctxII = canvasII.getContext('2d');
+        const canvasV1 = document.getElementById('ecg-canvas-v1');
+        const ctxV1 = canvasV1.getContext('2d');
+
+        let timeStep = 0;
+        let rhythmType = 'asystole'; 
+
+        const bufferWidth = 270;
+        let traceBufferII = new Array(bufferWidth).fill(19);
+        let traceBufferV1 = new Array(bufferWidth).fill(19);
+
+        function updateAndDrawMonitors() {
+            let nextValII = 19;
+            let nextValV1 = 19;
+            let baseline = 19;
+
+            if (rhythmType === 'asystole') {
+                nextValII = baseline + (Math.random() - 0.5) * 0.6;
+                nextValV1 = baseline + (Math.random() - 0.5) * 0.6;
+            } else if (rhythmType === 'vfiv') {
+                nextValII = baseline + Math.sin(timeStep * 0.35) * 10 + (Math.random() - 0.5) * 3;
+                nextValV1 = baseline + Math.cos(timeStep * 0.30) * 8 + (Math.random() - 0.5) * 3;
+            } else if (rhythmType === 'normal') {
+                let mod = timeStep % 90;
+                let complex = 0;
+                if (mod >= 10 && mod <= 16) {
+                    complex = -4 * Math.sin(((mod - 10) / 6) * Math.PI);
+                } else if (mod >= 30 && mod <= 33) {
+                    complex = 5 * ((mod - 30) / 3);
+                } else if (mod > 33 && mod <= 37) {
+                    let p = (mod - 33) / 4;
+                    complex = -32 * (1 - Math.abs(p - 0.5) * 2);
+                } else if (mod > 37 && mod <= 41) {
+                    let p = (mod - 37) / 4;
+                    complex = 14 * (1 - Math.abs(p - 0.5) * 2);
+                } else if (mod >= 58 && mod <= 70) {
+                    complex = -8 * Math.sin(((mod - 58) / 12) * Math.PI);
+                }
+                nextValII = baseline + complex + (Math.random() - 0.5) * 0.4;
+                nextValV1 = baseline + (complex * 0.6) + (Math.random() - 0.5) * 0.4;
+            }
+
+            traceBufferII.shift();
+            traceBufferII.push(nextValII);
+
+            traceBufferV1.shift();
+            traceBufferV1.push(nextValV1);
+
+            ctxII.fillStyle = '#000';
+            ctxII.fillRect(0, 0, canvasII.width, canvasII.height);
+            ctxII.strokeStyle = '#22c55e';
+            ctxII.lineWidth = 1.8;
+            ctxII.beginPath();
+            for (let x = 0; x < bufferWidth; x++) {
+                let y = traceBufferII[x];
+                if (x === 0) ctxII.moveTo(x, y);
+                else ctxII.lineTo(x, y);
+            }
+            ctxII.stroke();
+
+            ctxV1.fillStyle = '#000';
+            ctxV1.fillRect(0, 0, canvasV1.width, canvasV1.height);
+            ctxV1.strokeStyle = '#38bdf8';
+            ctxV1.lineWidth = 1.5;
+            ctxV1.beginPath();
+            for (let x = 0; x < bufferWidth; x++) {
+                let y = traceBufferV1[x];
+                if (x === 0) ctxV1.moveTo(x, y);
+                else ctxV1.lineTo(x, y);
+            }
+            ctxV1.stroke();
+
+            timeStep++;
+            if (simulationActive) {
+                requestAnimationFrame(updateAndDrawMonitors);
+            }
+        }
+
+        function toggleHint() {
+            const popup = document.getElementById('hint-popup');
+            popup.style.display = popup.style.display === 'block' ? 'none' : 'block';
+        }
+
+        window.onload = function() {
+            resetSimulation();
+            requestAnimationFrame(updateAndDrawMonitors);
+        };
+
+        function logEvent(message) {
+            const logBox = document.getElementById('dispatch-log');
+            const d = new Date();
+            const timeStr = String(d.getHours()).padStart(2, '0') + ":" + 
+                            String(d.getMinutes()).padStart(2, '0') + ":" + 
+                            String(d.getSeconds()).padStart(2, '0');
+            logBox.innerHTML += `<br>[${timeStr}]: ${message}`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function resetSimulation() {
+            clearInterval(monitoringInterval);
+            clearInterval(ambulanceTimer);
+            clearInterval(chaosTimer);
+            clearInterval(bystanderInterval);
+
+            compressionCount = 0;
+            etaRemaining = 0;
+            bystanderActive = false;
+            aedAvailable = false;
+            aedApplied = false;
+            simulationActive = true;
+            rhythmType = 'asystole';
+            timeStep = 0;
+
+            traceBufferII.fill(19);
+            traceBufferV1.fill(19);
+
+            document.getElementById('comp-count').innerText = "0";
+            document.getElementById('pacing-speed').innerText = "0";
+            document.getElementById('eta-display').innerText = "--";
+            document.getElementById('vitals-status').innerText = "ASYSTOLE";
+            document.getElementById('vitals-status').style.color = "#ef4444";
+            document.getElementById('spo2-status').innerText = "0%";
+            document.getElementById('monitor-mode-text').innerText = "MODE: CRITICAL";
+            document.getElementById('monitor-mode-text').style.color = "#ef4444";
+
+            document.getElementById('compress-btn').disabled = false;
+            document.getElementById('retry-btn').style.display = 'none';
+
+            document.getElementById('call-911-btn').disabled = false;
+            document.getElementById('call-bystander-btn').disabled = false;
+            document.getElementById('get-aed-btn').style.display = 'none';
+            document.getElementById('takeover-btn').style.display = 'none';
+
+            document.getElementById('ems-indicator').className = "indicator-dot";
+            document.getElementById('ems-text').innerText = "EMS: Standby";
+            document.getElementById('aed-indicator').className = "indicator-dot";
+            document.getElementById('aed-text').innerText = "AED: Unavailable";
+
+            document.getElementById('dispatch-log').innerHTML = "[00:00] CAD Dispatch: Cardiac arrest suspected. Initiate immediate BLS sequence.";
+
+            lastPressTimestamp = Date.now();
+            startMonitoringTimer();
+            startChaosEngine();
+            requestAnimationFrame(updateAndDrawMonitors);
+        }
+
+        function dispatchEMS() {
+            document.getElementById('call-911-btn').disabled = true;
+            etaRemaining = Math.floor(Math.random() * 15) + 22;
+            document.getElementById('ems-indicator').className = "indicator-dot active";
+            document.getElementById('ems-text').innerText = "EMS: En Route";
+            logEvent("911 Dispatch notified. Priority-1 response deployed. Estimated arrival in " + etaRemaining + "s.");
+            startAmbulanceCountdown();
+        }
+
+        function dispatchBystander() {
+            document.getElementById('call-bystander-btn').disabled = true;
+            let actionRoll = Math.random();
+
+            if (actionRoll < 0.35) {
+                logEvent("Bystander designated: Deployed to locate emergency AED device.");
+                setTimeout(() => {
+                    if (!simulationActive) return;
+                    aedAvailable = true;
+                    document.getElementById('aed-indicator').className = "indicator-dot active";
+                    document.getElementById('aed-text').innerText = "AED: Ready Nearby";
+                    document.getElementById('get-aed-btn').style.display = 'inline-block';
+                    logEvent("Bystander retrieved AED unit. Ready for pad placement.");
+                }, 4000);
+            } else if (actionRoll < 0.70 && !document.getElementById('call-911-btn').disabled) {
+                logEvent("Bystander designated: Initiating emergency call to Public Safety Answering Point (PSAP).");
+                dispatchEMS();
+            } else {
+                logEvent("Bystander designated: Assuming active chest compressions rotation.");
+                bystanderActive = true;
+                document.getElementById('takeover-btn').style.display = 'inline-block';
+                startBystanderEngine();
+            }
+        }
+
+        function startChaosEngine() {
+            clearInterval(chaosTimer);
+            chaosTimer = setInterval(() => {
+                if (!simulationActive) return;
+                let eventChance = Math.random();
+                if (eventChance < 0.30 && !document.getElementById('call-911-btn').disabled) {
+                    logEvent("Auto-Dispatch: Bystander on scene independently contacted emergency dispatch.");
+                    dispatchEMS();
+                } else if (eventChance < 0.60 && !aedAvailable && !aedApplied) {
+                    logEvent("Environment Alert: Public access AED located on nearby wall.");
+                    aedAvailable = true;
+                    document.getElementById('aed-indicator').className = "indicator-dot active";
+                    document.getElementById('aed-text').innerText = "AED: Ready Nearby";
+                    document.getElementById('get-aed-btn').style.display = 'inline-block';
+                }
+            }, 10000);
+        }
+
+        let bystanderInterval;
+        function startBystanderEngine() {
+            clearInterval(bystanderInterval);
+            bystanderInterval = setInterval(() => {
+                if (!simulationActive || !bystanderActive) return;
+                compressionCount++;
+                document.getElementById('comp-count').innerText = compressionCount;
+                document.getElementById('spo2-status').innerText = Math.min(95, 40 + compressionCount * 2) + "%";
+                evaluateRevivalCriteria();
+            }, 500);
+        }
+
+        function takeOverCPR() {
+            bystanderActive = false;
+            clearInterval(bystanderInterval);
+            document.getElementById('takeover-btn').style.display = 'none';
+            logEvent("Rescuer resumed direct manual chest compression protocol.");
+            lastPressTimestamp = Date.now();
+        }
+
+        function applyAED() {
+            if (!aedAvailable) return;
+            aedApplied = true;
+            document.getElementById('get-aed-btn').disabled = true;
+            logEvent("AED Pads applied. Analyzing heart rhythm...");
+            rhythmType = 'vfiv';
+            document.getElementById('vitals-status').innerText = "VFIB / VTAC";
+
+            setTimeout(() => {
+                if (!simulationActive) return;
+                logEvent("Shock advised. Stand clear. Delivering defibrillatory shock...");
+                setTimeout(() => {
+                    if (!simulationActive) return;
+                    rhythmType = 'normal';
+                    document.getElementById('vitals-status').innerText = "SINUS RHYTHM";
+                    document.getElementById('vitals-status').style.color = "#22c55e";
+                    document.getElementById('spo2-status').innerText = "98%";
+                    document.getElementById('monitor-mode-text').innerText = "MODE: STABLE";
+                    document.getElementById('monitor-mode-text').style.color = "#22c55e";
+                    terminateSimulation("SUCCESS: Defibrillation successful. Sinus rhythm restored. ROSC achieved.");
+                }, 1500);
+            }, 2500);
+        }
+
+        function performCompression() {
+            if (!simulationActive || bystanderActive) return;
+
+            const now = Date.now();
+            const delta = now - lastPressTimestamp;
+
+            if (delta < minAllowableInterval && compressionCount > 0) {
+                terminateSimulation("CRITICAL ERROR: Compression frequency excessive.");
+                return;
+            }
+
+            let currentCPM = delta > 0 ? Math.round(60000 / delta) : 100;
+            document.getElementById('pacing-speed').innerText = currentCPM;
+
+            lastPressTimestamp = now;
+
+            const torso = document.getElementById('patient-torso');
+            const hands = document.getElementById('hands-overlay');
+
+            torso.classList.add('compressing-anim');
+            hands.classList.add('hands-down');
+
+            compressionCount++;
+            document.getElementById('comp-count').innerText = compressionCount;
+            document.getElementById('spo2-status').innerText = Math.min(95, 35 + compressionCount * 1.5) + "%";
+
+            setTimeout(() => {
+                torso.classList.remove('compressing-anim');
+                hands.classList.remove('hands-down');
+            }, 80);
+
+            evaluateRevivalCriteria();
+        }
+
+        function evaluateRevivalCriteria() {
+            if (compressionCount >= 30 && compressionCount <= 100) {
+                rhythmType = 'normal';
+                document.getElementById('vitals-status').innerText = "SINUS RHYTHM";
+                document.getElementById('vitals-status').style.color = "#22c55e";
+                document.getElementById('spo2-status').innerText = "98%";
+                document.getElementById('monitor-mode-text').innerText = "MODE: STABLE";
+                document.getElementById('monitor-mode-text').style.color = "#22c55e";
+                terminateSimulation("SUCCESS: Return of Spontaneous Circulation (ROSC) attained.");
+            } else if (compressionCount > 100) {
+                terminateSimulation("FATAL: Rescuer fatigue limit reached.");
+            }
+        }
+
+        function startMonitoringTimer() {
+            clearInterval(monitoringInterval);
+            monitoringInterval = setInterval(() => {
+                if (!simulationActive || bystanderActive) return;
+                let elapsedSinceLast = Date.now() - lastPressTimestamp;
+                if (elapsedSinceLast > maxAllowableInterval) {
+                    terminateSimulation("FATAL: Perfusion pause exceeded safety threshold (>900ms).");
+                }
+            }, 100);
+        }
+
+        function startAmbulanceCountdown() {
+            clearInterval(ambulanceTimer);
+            ambulanceTimer = setInterval(() => {
+                if (!simulationActive) return;
+                etaRemaining--;
+                document.getElementById('eta-display').innerText = etaRemaining + "s";
+                if (etaRemaining <= 0) {
+                    terminateSimulation("SUCCESS: Advanced Life Support (ALS) unit arrived.");
+                }
+            }, 1000);
+        }
+
+        function terminateSimulation(message) {
+            simulationActive = false;
+            clearInterval(monitoringInterval);
+            clearInterval(ambulanceTimer);
+            clearInterval(chaosTimer);
+            clearInterval(bystanderInterval);
+
+            logEvent(message);
+            document.getElementById('dispatch-log').style.borderColor = message.includes("SUCCESS") ? "var(--accent-green)" : "var(--accent-red)";
+            document.getElementById('compress-btn').disabled = true;
+            document.getElementById('retry-btn').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
